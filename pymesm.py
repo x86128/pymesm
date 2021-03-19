@@ -1,4 +1,3 @@
-from logging import info
 from mesm_devs import *
 from mesm_cpu import CPU
 from mesm_utils import load_oct
@@ -23,4 +22,4 @@ if __name__ == '__main__':
     while cpu.running:
         cpu.step()
 
-    info("Simulation finished.")
+    print("Simulation finished.")

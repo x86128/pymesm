@@ -112,7 +112,7 @@ class CPU:
 
     def op_stop(self):
         self.running = False
-        # info(f"CPU halted at {self.pc:>04X} with {self.op_addr:>04X}")
+        print(f"CPU halted at {self.pc:>04X} with {self.op_addr:>04X}")
 
     def acc_is_zero(self):
         return self.acc == 0
