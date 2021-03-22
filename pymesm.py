@@ -17,7 +17,7 @@ if __name__ == '__main__':
     load_oct("examples/hello.oct", ibus, dbus)
 
     cpu = CPU(ibus, dbus)
-    cpu.run()
+    cpu.run(40)
 
     while cpu.running:
         cpu.step()

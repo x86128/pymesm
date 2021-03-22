@@ -6,6 +6,7 @@ class CPU:
     def __init__(self, ibus, dbus):
         self.pc = 1
         self.running = False
+        self.commands = 100
         self.ibus = ibus
         self.dbus = dbus
 
@@ -34,6 +35,7 @@ class CPU:
         self.stack = False
         self.rr_reg = 0
 
+    @property
     def uaddr(self):
         return (self.m[self.op_indx] + self.vaddr) & 0xFFFF
 
@@ -58,7 +60,7 @@ class CPU:
         if self.op_indx == 15:
             if self.vaddr == 0:
                 self.stack = True
-            elif self.op_code == 0o41 and self.uaddr() == 15:
+            elif self.op_code == 0o41 and self.uaddr == 15:
                 self.stack = True
             else:
                 self.stack = False
@@ -72,39 +74,39 @@ class CPU:
         self.m[index] = (self.m[index] + 0xFFFF) & 0xFFFF
 
     def op_atx(self):
-        self.dbus.write(self.uaddr(), self.acc)
+        self.dbus.write(self.uaddr, self.acc)
         if self.stack:
             self.mod_inc(15)
 
     def op_xta(self):
         if self.stack:
             self.mod_dec(15)
-        self.acc = self.dbus.read(self.uaddr())
+        self.acc = self.dbus.read(self.uaddr)
         # info(f"ACC: {self.acc:>08X}")
 
     def op_aax(self):
         if self.stack:
             self.mod_dec(15)
-        x = self.dbus.read(self.uaddr())
+        x = self.dbus.read(self.uaddr)
         self.acc = self.acc & x
         # info(f"ACC: {self.acc:>08X}")
 
     def op_aex(self):
         if self.stack:
             self.mod_dec(15)
-        x = self.dbus.read(self.uaddr())
+        x = self.dbus.read(self.uaddr)
         self.acc = self.acc ^ x
         # info(f"ACC: {self.acc:>08X}")
 
     def op_aox(self):
         if self.stack:
             self.mod_dec(15)
-        x = self.dbus.read(self.uaddr())
+        x = self.dbus.read(self.uaddr)
         self.acc = self.acc | x
         # info(f"ACC: {self.acc:>08X}")
 
     def op_utc(self):
-        self.c = self.uaddr()
+        self.c = self.uaddr
         self.c_active = True
 
     def op_vtm(self):
@@ -113,6 +115,10 @@ class CPU:
     def op_stop(self):
         self.running = False
         print(f"CPU halted at {self.pc:>04X} with {self.op_addr:>04X}")
+
+    def op_uj(self):
+        self.is_left = True
+        self.pc_next = self.uaddr
 
     def acc_is_zero(self):
         return self.acc == 0
@@ -125,6 +131,9 @@ class CPU:
                 f"{self.pc:>04X}: {OP_CODE[self.op_code]} {self.op_addr:>04X}(M{self.op_indx}={self.m[self.op_indx]:>04X})")
 
     def step(self):
+        self.commands -= 1
+        if self.commands <= 0:
+            self.running = False
         # FETCH
         if self.is_left:
             self.fetch()
@@ -156,11 +165,14 @@ class CPU:
             self.op_vtm()
         elif self.op_code == OP_STOP:
             self.op_stop()
+        elif self.op_code == OP_UJ:
+            self.op_uj()
         else:
             self.running = False
             self.print_insn()
 
         self.pc = self.pc_next
 
-    def run(self):
+    def run(self, num=100):
+        self.commands = num
         self.running = True
