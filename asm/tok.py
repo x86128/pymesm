@@ -36,8 +36,19 @@ class Tokenizer:
                     state = 'IDENT'
                 elif s.isdigit() or s == '-':
                     state = 'NUMBER'
+                elif s in "#;":
+                    state = 'COMMENT'
+                elif s in '[]':
+                    tok_txt = s
+                    state = 'BRACE'
+                    self._pos += 1
+                    break
+                elif s == '"':
+                    state = 'STRING'
+                    self._pos += 1
+                    continue
                 else:
-                    print(f"Unknown token at {self._pos}")
+                    print(f"Unknown token at {self._pos}: {s}")
                     raise Exception("ParseError")
                 tok_txt += s
                 self._pos += 1
@@ -56,6 +67,17 @@ class Tokenizer:
                     raise Exception("ParseError")
                 else:
                     break
+            elif state == 'COMMENT':
+                if s == '\n':
+                    tok_txt = ""
+                    state = 'NONE'
+                self._pos += 1
+            elif state == 'STRING':
+                if s == '"':
+                    self._pos += 1
+                    break
+                tok_txt += s
+                self._pos += 1
             else:
                 print(f"Unknown state at {self._pos} {self.source[tok_pos:self._pos + 5]}")
                 raise Exception("ParseError")
