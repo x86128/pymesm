@@ -5,10 +5,10 @@ from opcodes import OPCODES
 
 def print_usage():
     print("Usage:")
-    print("asm.py input.asm [output.asm]")
+    print("asm.py input.asm [output.oct]")
 
 
-keywords = ['ptr', 'org', 'arr', 'mem', 'lbl']
+keywords = ['ptr', 'org', 'dorg', 'arr', 'mem', 'lbl']
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
@@ -35,7 +35,11 @@ if __name__ == '__main__':
                 if kwrd == 'org':
                     PC = 2 * eval(t.next[3])
                     t.advance()
-                    print(f"PC set to {PC:0>4X}")
+                    print(f"PC set to {PC>>1:0>4X}")
+                elif kwrd == 'dorg':
+                    DP = eval(t.next[3])
+                    t.advance()
+                    print(f"DP set to {DP:0>4X}")
                 elif kwrd == 'ptr':
                     t.advance()
                     name = t.curr[3]
@@ -47,8 +51,8 @@ if __name__ == '__main__':
                     if PC % 1 == 1:
                         irom[PC] = ('CMD',0o102, 0)  # MODA
                         PC += 1
-                    names[t.next[3]] = (t.curr[3], PC)
-                    print(f"Label set to {(t.curr[3], PC)}")
+                    names[t.next[3]] = (t.curr[3], PC>>1)
+                    print(f"Label set to {(t.curr[3], PC>>1)}")
                     t.advance()
                 elif kwrd == 'arr':
                     t.advance()
@@ -59,7 +63,6 @@ if __name__ == '__main__':
                     for c in text:
                         dram[DP] = ord(c)
                         DP += 1
-                    DP += 1
                 else:
                     print(f"Unimplemented keyword: {kwrd}")
                     raise Exception("UnimplementedKeyword")
@@ -71,7 +74,7 @@ if __name__ == '__main__':
                 if t.curr[0] == 'NUMBER':
                     addr = eval(t.curr[3])
                     irom[PC] = ('CMD', OPCODES[op], addr)
-                    print(f"PC: {PC:0>4X} {op} {addr}")
+                    print(f"PC: {PC>>1:0>4X}.{PC&1} {op} {addr}")
                 else:
                     if t.next[0] == 'BRACE': # arr access
                         t.advance()
@@ -83,9 +86,9 @@ if __name__ == '__main__':
                     if name in names:
                         addr = names[name][1]+offset
                         irom[PC] = ('CMD', OPCODES[op], addr)
-                        print(f"PC: {PC:0>4X} {op} {name}+{offset}:{addr}")
+                        print(f"PC: {PC>>1:0>4X}.{PC&1} {op} {name}+{offset}:{addr}")
                     else:
-                        print(f"PC: {PC:0>4X} {op} {name}+{offset}:FIX")
+                        print(f"PC: {PC>>1:0>4X}.{PC&1} {op} {name}+{offset}:FIX")
                         irom[PC] = ('FIX', OPCODES[op], name, offset)
                 PC += 1
             else:
@@ -104,20 +107,27 @@ if __name__ == '__main__':
             else:
                 print(f"Undefined symbol: {irom[i][2]}")
                 raise Exception("UndefinedSymbol")
-    # do irom print out
-    for pc in range(0,131072,2):
-        if irom[pc][0] != 'NONE':
-            opc = pc >> 1
-            left_idx = 0 << 24
-            left_op = irom[pc][1] << 16
-            left_addr = irom[pc][2]
-            left = left_idx | left_op | left_addr
-            right_idx = 0 << 32
-            right_op = irom[pc+1][1] << 16
-            right_addr = irom[pc+1][2]
-            right = right_idx | right_op | right_addr
-            print(f"i {opc:>04X} {left:>08X} {right:>08X}")
-    # do dram print out
-    for dp in range(65536):
-        if dram[dp] != 0:
-            print(f"d {dp:>04X} {dram[dp]:>08X}")
+
+    if len(sys.argv) == 3:
+        output = sys.argv[2]
+    else:
+        output = sys.argv[1][:-4]+".oct"
+    
+    with open(output,'wt') as out:
+        # do irom print out
+        for pc in range(0,131072,2):
+            if irom[pc][0] != 'NONE':
+                opc = pc >> 1
+                left_idx = 0 << 24
+                left_op = irom[pc][1] << 16
+                left_addr = irom[pc][2]
+                left = left_idx | left_op | left_addr
+                right_idx = 0 << 32
+                right_op = irom[pc+1][1] << 16
+                right_addr = irom[pc+1][2]
+                right = right_idx | right_op | right_addr
+                out.write(f"i {opc:>04X} {left:>08X} {right:>08X}\n")
+        # do dram print out
+        for dp in range(65536):
+            if dram[dp] != 0:
+                out.write(f"d {dp:>04X} 00 {dram[dp]:>08X}\n")

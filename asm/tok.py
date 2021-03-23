@@ -75,6 +75,7 @@ class Tokenizer:
             elif state == 'STRING':
                 if s == '"':
                     self._pos += 1
+                    tok_txt = tok_txt.encode().decode('unicode-escape')
                     break
                 tok_txt += s
                 self._pos += 1
