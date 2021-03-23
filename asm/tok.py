@@ -1,3 +1,12 @@
+from dataclasses import dataclass
+
+
+@dataclass
+class Token:
+    typ: str
+    val: str
+
+
 class Tokenizer:
 
     def __init__(self, input):
@@ -18,6 +27,18 @@ class Tokenizer:
     @property
     def next(self):
         return self._next
+
+    def peek(self, typ):
+        return self._curr.typ == typ
+
+    def get(self, typ):
+        if self.peek(typ):
+            t = self._curr
+            self.advance()
+            return t
+        else:
+            print(f"Expected {typ}, got: {self._curr.typ}.")
+            raise Exception("ParseError")
 
     def advance(self):
         self._curr = self._next
@@ -82,4 +103,4 @@ class Tokenizer:
             else:
                 print(f"Unknown state at {self._pos} {self.source[tok_pos:self._pos + 5]}")
                 raise Exception("ParseError")
-        self._next = (state, self._line, tok_pos, tok_txt)
+        self._next = Token(state, tok_txt)
