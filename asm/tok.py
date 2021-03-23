@@ -55,7 +55,7 @@ class Tokenizer:
                     continue
                 elif s.isalpha():
                     state = 'IDENT'
-                elif s.isdigit() or s == '-':
+                elif s.isdigit():
                     state = 'NUMBER'
                 elif s in "#;":
                     state = 'COMMENT'
@@ -68,6 +68,16 @@ class Tokenizer:
                     state = 'STRING'
                     self._pos += 1
                     continue
+                elif s in '+-':
+                    state = 'BINOP'
+                    tok_txt += s
+                    self._pos += 1
+                    break
+                elif s == ',':
+                    state = 'COMMA'
+                    tok_txt += s
+                    self._pos += 1
+                    break
                 else:
                     print(f"Unknown token at {self._pos}: {s}")
                     raise Exception("ParseError")

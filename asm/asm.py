@@ -28,19 +28,32 @@ if __name__ == '__main__':
     lbls = {}
     names = {}
 
+    def get_number(tok):
+        # try unary first "- NUMBER"
+        if tok.peek('BINOP') and tok.curr.val == '-':
+            if tok.next.typ == 'NUMBER':
+                bop = t.get('BINOP').val
+                return eval(bop + t.get('NUMBER').val)
+        # than just "NUMBER"
+        elif tok.peek('NUMBER'):
+            return eval(t.get('NUMBER').val)
+        else:
+            print("Expected number, got ", tok.curr)
+            raise Exception("ParseException")
+
     while not t.peek('NONE'):
         if t.peek('IDENT'):
             kwrd = t.get('IDENT').val.lower()
             if kwrd in keywords:
                 if kwrd == 'org':
-                    PC = 2 * eval(t.get('NUMBER').val)
+                    PC = 2 * (get_number(t) & 0xFFFF)
                     print(f"PC set to {PC >> 1:0>4X}")
                 elif kwrd == 'dorg':
-                    DP = eval(t.get('NUMBER').val)
+                    DP = get_number(t) & 0xFFFF
                     print(f"DP set to {DP:0>4X}")
                 elif kwrd == 'ptr':
                     name = t.get('IDENT').val
-                    addr = eval(t.get('NUMBER').val)
+                    addr = get_number(t) & 0xFFFF
                     names[name] = (name, addr)
                     print(f"PTR set {(name, addr)}")
                 elif kwrd == 'lbl':
@@ -63,20 +76,38 @@ if __name__ == '__main__':
             elif kwrd in OPCODES:
                 op = kwrd
                 offset = 0
+                # try "OP NUMBER"
                 if t.peek('NUMBER'):
-                    addr = eval(t.get('NUMBER').val)
+                    addr = get_number(t) & 0xFFFF
+                    irom[PC] = ('CMD', OPCODES[op], addr)
+                    print(f"PC: {PC >> 1:0>4X}.{PC & 1} {op} {addr}")
+                # than "OP -NUMBER"
+                elif t.peek('BINOP'):
+                    addr = get_number(t) & 0xFFFF
                     irom[PC] = ('CMD', OPCODES[op], addr)
                     print(f"PC: {PC >> 1:0>4X}.{PC & 1} {op} {addr}")
                 else:
+                    # than "OP NAME[+-NUMBER]"
                     name = t.get('IDENT').val
                     if t.peek('BRACE'):  # arr access
                         t.get('BRACE')
-                        offset = eval(t.get('NUMBER').val)
+                        offset = get_number(t) & 0xFFFF
                         t.get('BRACE')
+                    # than "OP NAME+-OFFSET"
+                    elif t.peek('BINOP'):
+                        bop = t.get('BINOP').val
+                        if bop == '+':
+                            offset = eval(t.get('NUMBER').val)
+                        elif bop == '-':
+                            offset = 0 - eval(t.get('NUMBER').val)
+                        else:
+                            print(f"Unexpected bin_op {bop}.")
+                            raise Exception("ParseError")
+                    # than just "OP NAME"
                     else:
                         offset = 0
                     if name in names:
-                        addr = names[name][1] + offset
+                        addr = (names[name][1] + offset) & 0xFFFF
                         irom[PC] = ('CMD', OPCODES[op], addr)
                         print(f"PC: {PC >> 1:0>4X}.{PC & 1} {op} {name}+{offset}:{addr}")
                     else:
@@ -84,10 +115,10 @@ if __name__ == '__main__':
                         print(f"PC: {PC >> 1:0>4X}.{PC & 1} {op} {name}+{offset}:FIX")
                 PC += 1
             else:
-                print(f"Unknown assembler command: {t.curr[3]}")
+                print(f"Unknown assembler command: {kwrd}")
                 raise Exception()
         else:
-            print(f"Error at line {t.curr[1]}: keyword or command required")
+            print(f"Error at line {t.curr}: keyword or command required")
             raise Exception("AssemblyError")
 
     # do fixups
