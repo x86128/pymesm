@@ -22,11 +22,12 @@ if __name__ == '__main__':
 
     PC = 0
     DP = 0
-    irom = [('NONE', 0o102, 0)] * 131072  # fill with MODA
+    irom = [('NONE', 0, 0o102, 0)] * 131072  # fill with MODA
     dram = [0] * 65536
 
     lbls = {}
     names = {}
+
 
     def get_number(tok):
         # try unary first "- NUMBER"
@@ -40,6 +41,7 @@ if __name__ == '__main__':
         else:
             print("Expected number, got ", tok.curr)
             raise Exception("ParseException")
+
 
     while not t.peek('NONE'):
         if t.peek('IDENT'):
@@ -76,15 +78,17 @@ if __name__ == '__main__':
             elif kwrd in OPCODES:
                 op = kwrd
                 offset = 0
+                addr = 0
+                indx = 0
                 # try "OP NUMBER"
                 if t.peek('NUMBER'):
                     addr = get_number(t) & 0xFFFF
-                    irom[PC] = ('CMD', OPCODES[op], addr)
+                    # irom[PC] = ('CMD', OPCODES[op], addr)
                     print(f"PC: {PC >> 1:0>4X}.{PC & 1} {op} {addr}")
                 # than "OP -NUMBER"
                 elif t.peek('BINOP'):
                     addr = get_number(t) & 0xFFFF
-                    irom[PC] = ('CMD', OPCODES[op], addr)
+                    # irom[PC] = ('CMD', OPCODES[op], addr)
                     print(f"PC: {PC >> 1:0>4X}.{PC & 1} {op} {addr}")
                 else:
                     # than "OP NAME[+-NUMBER]"
@@ -108,11 +112,21 @@ if __name__ == '__main__':
                         offset = 0
                     if name in names:
                         addr = (names[name][1] + offset) & 0xFFFF
-                        irom[PC] = ('CMD', OPCODES[op], addr)
+                        # irom[PC] = ('CMD', OPCODES[op], addr)
                         print(f"PC: {PC >> 1:0>4X}.{PC & 1} {op} {name}+{offset}:{addr}")
                     else:
-                        irom[PC] = ('FIX', OPCODES[op], name, offset)
+                        # irom[PC] = ('FIX', OPCODES[op], name, offset)
+                        addr = (name, offset)
                         print(f"PC: {PC >> 1:0>4X}.{PC & 1} {op} {name}+{offset}:FIX")
+                # index register suffix "xta 123,15"
+                if t.peek('COMMA'):
+                    t.get('COMMA')
+                    indx = get_number(t)
+
+                if isinstance(addr, tuple):
+                    irom[PC] = ('FIX', indx, OPCODES[op], addr[0], addr[1])
+                else:
+                    irom[PC] = ('CMD', indx, OPCODES[op], addr)
                 PC += 1
             else:
                 print(f"Unknown assembler command: {kwrd}")
@@ -124,10 +138,10 @@ if __name__ == '__main__':
     # do fixups
     for i in range(131072):
         if irom[i][0] == 'FIX':
-            if irom[i][2] in names:
-                irom[i] = ('CMD', irom[i][1], names[irom[i][2]][1] + irom[i][3])
+            if irom[i][3] in names:
+                irom[i] = ('CMD', irom[i][1], irom[i][2], names[irom[i][3]][1] + irom[i][4])
             else:
-                print(f"Undefined symbol: {irom[i][2]}")
+                print(f"Undefined symbol: {irom[i][3]}")
                 raise Exception("UndefinedSymbol")
 
     if len(sys.argv) == 3:
@@ -140,13 +154,13 @@ if __name__ == '__main__':
         for pc in range(0, 131072, 2):
             if irom[pc][0] != 'NONE':
                 opc = pc >> 1
-                left_idx = 0 << 24
-                left_op = irom[pc][1] << 16
-                left_addr = irom[pc][2]
+                left_idx = irom[pc][1] << 24
+                left_op = irom[pc][2] << 16
+                left_addr = irom[pc][3]
                 left = left_idx | left_op | left_addr
-                right_idx = 0 << 32
-                right_op = irom[pc + 1][1] << 16
-                right_addr = irom[pc + 1][2]
+                right_idx = irom[pc + 1][1] << 24
+                right_op = irom[pc + 1][2] << 16
+                right_addr = irom[pc + 1][3]
                 right = right_idx | right_op | right_addr
                 out.write(f"i {opc:>04X} {left:>08X} {right:>08X}\n")
         # do dram print out
