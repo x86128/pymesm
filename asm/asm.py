@@ -42,6 +42,27 @@ if __name__ == '__main__':
             print("Expected number, got ", tok.curr)
             raise Exception("ParseException")
 
+    def get_number_array(tok):
+        result = []
+        while True:
+            # try unary first "- NUMBER"
+            if tok.peek('BINOP') and tok.curr.val == '-':
+                if tok.next.typ == 'NUMBER':
+                    bop = t.get('BINOP').val
+                    result.append(eval(bop + t.get('NUMBER').val))
+            # than just "NUMBER"
+            elif tok.peek('NUMBER'):
+                result.append(eval(t.get('NUMBER').val))
+            else:
+                print("Expected number, got ", tok.curr)
+                raise Exception("ParseException")
+            if t.peek('COMMA'):
+                t.get('COMMA')
+                continue
+            else:
+                break
+        return result
+
 
     while not t.peek('NONE'):
         if t.peek('IDENT'):
@@ -67,11 +88,27 @@ if __name__ == '__main__':
                     print(f"Label set to {(name, PC >> 1)}")
                 elif kwrd == 'arr':
                     name = t.get('IDENT').val
-                    text = t.get('STRING').val
                     names[name] = (name, DP)
-                    for c in text:
-                        dram[DP] = ord(c)
+                    # array of chars in "STRING"
+                    if t.peek('STRING'):
+                        for c in t.get('STRING').val:
+                            dram[DP] = ord(c)
+                            DP += 1
+                    # array of "NUMBER"
+                    elif t.peek('BRACE'):
+                        t.get('BRACE')
+                        for val in get_number_array(t):
+                            dram[DP] = val & 0xFFFFFFFF
+                            DP += 1
+                        t.get('BRACE')
+                    # single constant
+                    elif t.peek('BINOP') or t.peek('NUMBER'):
+                        val = get_number(t) & 0xFFFFFFFF
+                        dram[DP] = val
                         DP += 1
+                    else:
+                        print(f"Array declaration syntax error {t.curr}")
+                        raise Exception("ParseError")
                 else:
                     print(f"Unimplemented keyword: {kwrd}")
                     raise Exception("UnimplementedKeyword")
