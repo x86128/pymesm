@@ -39,8 +39,8 @@ if __name__ == '__main__':
         elif tok.peek('NUMBER'):
             return eval(t.get('NUMBER').val)
         else:
-            print("Expected number, got ", tok.curr)
-            raise Exception("ParseException")
+            print(f"line: {tok.curr.line}: Expected number, got ", tok.curr.typ)
+            sys.exit(1)
 
     def get_number_array(tok):
         result = []
@@ -55,7 +55,7 @@ if __name__ == '__main__':
                 result.append(eval(t.get('NUMBER').val))
             else:
                 print("Expected number, got ", tok.curr)
-                raise Exception("ParseException")
+                sys.exit(1)
             if t.peek('COMMA'):
                 t.get('COMMA')
                 continue
@@ -66,7 +66,8 @@ if __name__ == '__main__':
 
     while not t.peek('NONE'):
         if t.peek('IDENT'):
-            kwrd = t.get('IDENT').val.lower()
+            cmd = t.get('IDENT')
+            kwrd = cmd.val.lower()
             if kwrd in keywords:
                 if kwrd == 'org':
                     PC = 2 * (get_number(t) & 0xFFFF)
@@ -107,11 +108,11 @@ if __name__ == '__main__':
                         dram[DP] = val
                         DP += 1
                     else:
-                        print(f"Array declaration syntax error {t.curr}")
-                        raise Exception("ParseError")
+                        print(f"line: {t.curr.line} Array declaration syntax error")
+                        sys.exit(1)
                 else:
                     print(f"Unimplemented keyword: {kwrd}")
-                    raise Exception("UnimplementedKeyword")
+                    sys.exit(1)
             elif kwrd in OPCODES:
                 op = kwrd
                 offset = 0
@@ -142,17 +143,15 @@ if __name__ == '__main__':
                         elif bop == '-':
                             offset = 0 - eval(t.get('NUMBER').val)
                         else:
-                            print(f"Unexpected bin_op {bop}.")
-                            raise Exception("ParseError")
+                            print(f"line: {t.curr.line}: Unexpected bin_op {bop}.")
+                            sys.exit(1)
                     # than just "OP NAME"
                     else:
                         offset = 0
                     if name in names:
                         addr = (names[name][1] + offset) & 0xFFFF
-                        # irom[PC] = ('CMD', OPCODES[op], addr)
                         print(f"PC: {PC >> 1:0>4X}.{PC & 1} {op} {name}+{offset}:{addr}")
                     else:
-                        # irom[PC] = ('FIX', OPCODES[op], name, offset)
                         addr = (name, offset)
                         print(f"PC: {PC >> 1:0>4X}.{PC & 1} {op} {name}+{offset}:FIX")
                 # index register suffix "xta 123,15"
@@ -166,11 +165,11 @@ if __name__ == '__main__':
                     irom[PC] = ('CMD', indx, OPCODES[op], addr)
                 PC += 1
             else:
-                print(f"Unknown assembler command: {kwrd}")
-                raise Exception()
+                print(f"line: {cmd.line}: Unknown assembler command: {kwrd}")
+                sys.exit(1)
         else:
-            print(f"Error at line {t.curr}: keyword or command required")
-            raise Exception("AssemblyError")
+            print(f"line {t.curr.line}: keyword or command required")
+            sys.exit(1)
 
     # do fixups
     for i in range(131072):

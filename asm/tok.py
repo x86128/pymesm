@@ -1,3 +1,4 @@
+import sys
 from dataclasses import dataclass
 
 
@@ -5,6 +6,7 @@ from dataclasses import dataclass
 class Token:
     typ: str
     val: str
+    line: int
 
 
 class Tokenizer:
@@ -15,7 +17,7 @@ class Tokenizer:
         self._next = None
         self._pos = 0
         self._len = len(self.source)
-        self._line = 0
+        self._line = 1
         self._lpos = 0
         self.advance()
         self.advance()
@@ -37,13 +39,12 @@ class Tokenizer:
             self.advance()
             return t
         else:
-            print(f"Expected {typ}, got: {self._curr.typ}.")
-            raise Exception("ParseError")
+            print(f"line {self._curr.line}: expected {typ}, got: {self._curr.typ}.")
+            sys.exit(1)
 
     def advance(self):
         self._curr = self._next
         tok_txt = ""
-        tok_pos = self._pos
         state = 'NONE'
         while self._pos < self._len:
             s = self.source[self._pos]
@@ -79,8 +80,8 @@ class Tokenizer:
                     self._pos += 1
                     break
                 else:
-                    print(f"Unknown token at {self._pos}: {s}")
-                    raise Exception("ParseError")
+                    print(f"line: {self._line}: Unknown token: {s}")
+                    sys.exit(1)
                 tok_txt += s
                 self._pos += 1
             elif state == 'IDENT':
@@ -94,8 +95,8 @@ class Tokenizer:
                     tok_txt += s
                     self._pos += 1
                 elif s.isalpha():
-                    print(f"Number format err at {self._pos} {self.source[tok_pos:self._pos + 5]}")
-                    raise Exception("ParseError")
+                    print(f"line: {self._line}: Number format error")
+                    sys.exit(1)
                 else:
                     break
             elif state == 'COMMENT':
@@ -111,6 +112,6 @@ class Tokenizer:
                 tok_txt += s
                 self._pos += 1
             else:
-                print(f"Unknown state at {self._pos} {self.source[tok_pos:self._pos + 5]}")
-                raise Exception("ParseError")
-        self._next = Token(state, tok_txt)
+                print(f"line: {self._line}: Unknown state at {state}")
+                sys.exit(1)
+        self._next = Token(state, tok_txt, self._line)

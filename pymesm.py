@@ -1,10 +1,11 @@
+import sys
 from mesm_devs import *
 from mesm_cpu import CPU
 from mesm_utils import load_oct
 
 if __name__ == '__main__':
-    irom = RamDevice("IROM0", 2048)
-    dram = RamDevice("DRAM0", 2048)
+    irom = RamDevice("IROM0", 65536)
+    dram = RamDevice("DRAM0", 49152)
     printer = Printer("PRN0")
 
     ibus = Bus("IBUS")
@@ -12,9 +13,13 @@ if __name__ == '__main__':
 
     ibus.attach(irom, 0)
     dbus.attach(dram, 0)
-    dbus.attach(printer, 2048)
+    dbus.attach(printer, 65535)
 
-    load_oct("examples/hello.oct", ibus, dbus)
+    if len(sys.argv) < 2:
+        print("Usage:\npymesm.py program.oct")
+        sys.exit(1)
+
+    load_oct(sys.argv[1], ibus, dbus)
 
     cpu = CPU(ibus, dbus)
     cpu.run(40)
