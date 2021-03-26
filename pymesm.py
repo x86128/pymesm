@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import sys
 from mesm_devs import *
 from mesm_cpu import CPU

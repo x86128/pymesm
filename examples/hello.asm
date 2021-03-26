@@ -1,6 +1,6 @@
 # hello world
 org 1
-ptr prn0 0x800
+ptr prn0 65535
 xta hello[0]
 atx prn0
 xta hello[1]

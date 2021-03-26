@@ -97,6 +97,15 @@ class CPU:
         if self.stack:
             self.mod_inc(15)
 
+    def op_ati(self):
+        t = self.uaddr & 0xF
+        if t != 0:
+            self.m[t] = self.acc & 0xFFFF
+
+    def op_ita(self):
+        self.m[self.uaddr & 0xF]
+        self.set_log()
+
     def op_stx(self):
         self.dbus.write(self.uaddr, self.acc)
         self.mod_dec(15)
@@ -140,6 +149,11 @@ class CPU:
 
     def op_vtm(self):
         self.m[self.op_indx] = self.vaddr
+
+    def op_vim(self):
+        if self.m[self.op_indx] != 0:
+            self.pc_next = self.vaddr
+            self.is_left = True
 
     def op_stop(self):
         self.running = False
@@ -190,6 +204,10 @@ class CPU:
 
         if self.op_code == OP_ATX:
             self.op_atx()
+        elif self.op_code == OP_ATI:
+            self.op_ati()
+        elif self.op_code == OP_ITA:
+            self.op_ita()
         elif self.op_code == OP_XTA:
             self.op_xta()
         elif self.op_code == OP_AAX:
@@ -202,6 +220,8 @@ class CPU:
             self.op_utc()
         elif self.op_code == OP_VTM:
             self.op_vtm()
+        elif self.op_code == OP_VIM:
+            self.op_vim()
         elif self.op_code == OP_STOP:
             self.op_stop()
         elif self.op_code == OP_UJ:
