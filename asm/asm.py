@@ -81,8 +81,8 @@ if __name__ == '__main__':
                     names[name] = (name, addr)
                     print(f"PTR set {(name, addr)}")
                 elif kwrd == 'lbl':
-                    if PC % 1 == 1:
-                        irom[PC] = ('CMD', 0o102, 0)  # MODA
+                    if PC & 1 == 1:
+                        irom[PC] = ('CMD', 0, 0o102, 0)  # MODA
                         PC += 1
                     name = t.get('IDENT').val
                     names[name] = (name, PC >> 1)
