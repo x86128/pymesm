@@ -103,7 +103,8 @@ class CPU:
             self.m[t] = self.acc & 0xFFFF
 
     def op_ita(self):
-        self.m[self.uaddr & 0xF]
+        t = self.uaddr & 0xF
+        self.acc = self.m[t]
         self.set_log()
 
     def op_stx(self):
@@ -147,11 +148,21 @@ class CPU:
         self.c = self.uaddr
         self.c_active = True
 
+    def op_utm(self):
+        t = self.op_indx & 0xF
+        if t != 0:
+            self.m[t] = (self.m[t] + self.vaddr) & 0xFFFF
+
     def op_vtm(self):
         self.m[self.op_indx] = self.vaddr
 
     def op_vim(self):
         if self.m[self.op_indx] != 0:
+            self.pc_next = self.vaddr
+            self.is_left = True
+    
+    def op_vzm(self):
+        if self.m[self.op_indx] == 0:
             self.pc_next = self.vaddr
             self.is_left = True
 
@@ -218,10 +229,14 @@ class CPU:
             self.op_aox()
         elif self.op_code == OP_UTC:
             self.op_utc()
+        elif self.op_code == OP_UTM:
+            self.op_utm()
         elif self.op_code == OP_VTM:
             self.op_vtm()
         elif self.op_code == OP_VIM:
             self.op_vim()
+        elif self.op_code == OP_VZM:
+            self.op_vzm()
         elif self.op_code == OP_STOP:
             self.op_stop()
         elif self.op_code == OP_UJ:
