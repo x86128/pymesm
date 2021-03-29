@@ -30,6 +30,10 @@ class Tokenizer:
     def next(self):
         return self._next
 
+    @property
+    def eof(self):
+        return self._pos >= self._len
+
     def peek(self, typ):
         return self._curr.typ == typ
 
@@ -39,8 +43,7 @@ class Tokenizer:
             self.advance()
             return t
         else:
-            print(f"line {self._curr.line}: expected {typ}, got: {self._curr.typ}.")
-            sys.exit(1)
+            return None
 
     def advance(self):
         self._curr = self._next
