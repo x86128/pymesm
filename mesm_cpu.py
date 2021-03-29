@@ -165,13 +165,29 @@ class CPU:
         self.c = self.uaddr
         self.c_active = True
 
+    def op_wtc(self):
+        if self.stack:
+            self.mod_dec(15)
+        self.c = self.dbus.read(self.uaddr)
+        self.c_active = True
+
     def op_utm(self):
         t = self.op_indx & 0xF
         if t != 0:
-            self.m[t] = (self.m[t] + self.vaddr) & 0xFFFF
+            self.m[t] = self.uaddr
 
     def op_vtm(self):
         self.m[self.op_indx] = self.vaddr
+
+    def op_mtj(self):
+        t = self.vaddr & 0xF
+        if t != 0:
+            self.m[t] = self.m[self.op_indx]
+
+    def op_jaddm(self):
+        t = self.vaddr & 0xF
+        if t != 0:
+            self.m[t] = (self.m[t] + self.m[self.op_indx]) & 0xFFFF
 
     def op_vim(self):
         if self.m[self.op_indx] != 0:
@@ -248,10 +264,16 @@ class CPU:
             self.op_aox()
         elif self.op_code == OP_UTC:
             self.op_utc()
+        elif self.op_code == OP_WTC:
+            self.op_wtc()
         elif self.op_code == OP_UTM:
             self.op_utm()
         elif self.op_code == OP_VTM:
             self.op_vtm()
+        elif self.op_code == OP_MTJ:
+            self.op_mtj()
+        elif self.op_code == OP_JADDM:
+            self.op_jaddm()
         elif self.op_code == OP_VIM:
             self.op_vim()
         elif self.op_code == OP_VZM:

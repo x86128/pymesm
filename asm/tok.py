@@ -91,7 +91,7 @@ class Tokenizer:
                 else:
                     break
             elif state == 'NUMBER':
-                if s.isdigit() or s in 'obxOBX':
+                if s.isdigit() or s in 'obxOBXABCDEFabcdef':
                     tok_txt += s
                     self._pos += 1
                 elif s.isalpha():
