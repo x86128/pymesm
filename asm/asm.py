@@ -110,6 +110,10 @@ if __name__ == '__main__':
                     else:
                         print(f"line: {t.curr.line} Array declaration syntax error")
                         sys.exit(1)
+                elif kwrd == 'mem':
+                    name = t.get('IDENT').val
+                    names[name] = (name, DP)
+                    DP += get_number(t)
                 else:
                     print(f"Unimplemented keyword: {kwrd}")
                     sys.exit(1)

@@ -135,7 +135,6 @@ class CPU:
             self.mod_dec(15)
         self.acc = self.dbus.read(self.uaddr) & 0xFFFFFFFF
         self.set_log()
-        # info(f"ACC: {self.acc:>08X}")
 
     def op_aax(self):
         if self.stack:
@@ -144,6 +143,17 @@ class CPU:
         self.acc = self.acc & x
         self.set_log()
         # info(f"ACC: {self.acc:>08X}")
+
+    def op_arx(self):
+        if self.stack:
+            self.mod_dec(15)
+        ua = self.acc & 0xFFFFFFFF
+        ux = self.dbus.read(self.uaddr) & 0xFFFFFFFF
+        t = ua + ux
+        if t > 0xFFFFFFFF:
+            t += 1
+        self.acc = t & 0xFFFFFFFF
+        self.set_mul()
 
     def op_aex(self):
         if self.stack:
@@ -202,10 +212,17 @@ class CPU:
     def op_vjm(self):
         self.pc_next = self.vaddr
         self.is_left = True
-        t = self.op_indx & 0xF
-        if t != 0:
-            self.m[t] = self.pc + 1
+        mi = self.op_indx & 0xF
+        if mi != 0:
+            self.m[mi] = self.pc + 1
 
+    def op_vlm(self):
+        mi = self.op_indx & 0xF
+        if self.m[mi] != 0:
+            self.pc_next = self.vaddr
+            self.is_left = True
+            if mi != 0:
+                self.m[mi] = (self.m[mi] + 1) & 0xFFFF
 
     def op_stop(self):
         self.running = False
@@ -218,6 +235,9 @@ class CPU:
     def op_uj(self):
         self.is_left = True
         self.pc_next = self.uaddr
+
+    def op_ij(self):
+        pass
 
     def op_uia(self):
         if self.omega:
@@ -270,6 +290,8 @@ class CPU:
             self.op_aex()
         elif self.op_code == OP_AOX:
             self.op_aox()
+        elif self.op_code == OP_ARX:
+            self.op_arx()
         elif self.op_code == OP_UTC:
             self.op_utc()
         elif self.op_code == OP_WTC:
@@ -288,6 +310,10 @@ class CPU:
             self.op_vzm()
         elif self.op_code == OP_VJM:
             self.op_vjm()
+        elif self.op_code == OP_VLM:
+            self.op_vlm()
+        elif self.op_code == OP_IJ:
+            self.op_ij()
         elif self.op_code == OP_STOP:
             self.op_stop()
         elif self.op_code == OP_UJ:
