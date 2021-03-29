@@ -193,11 +193,19 @@ class CPU:
         if self.m[self.op_indx] != 0:
             self.pc_next = self.vaddr
             self.is_left = True
-    
+
     def op_vzm(self):
         if self.m[self.op_indx] == 0:
             self.pc_next = self.vaddr
             self.is_left = True
+
+    def op_vjm(self):
+        self.pc_next = self.vaddr
+        self.is_left = True
+        t = self.op_indx & 0xF
+        if t != 0:
+            self.m[t] = self.pc + 1
+
 
     def op_stop(self):
         self.running = False
@@ -278,6 +286,8 @@ class CPU:
             self.op_vim()
         elif self.op_code == OP_VZM:
             self.op_vzm()
+        elif self.op_code == OP_VJM:
+            self.op_vjm()
         elif self.op_code == OP_STOP:
             self.op_stop()
         elif self.op_code == OP_UJ:
