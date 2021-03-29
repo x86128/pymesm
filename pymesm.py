@@ -1,9 +1,15 @@
 #!/usr/bin/python3
 
 import sys
-from mesm_devs import *
+import argparse
+from mesm_devs import Bus, RamDevice, Printer
 from mesm_cpu import CPU
 from mesm_utils import load_oct
+
+argp = argparse.ArgumentParser()
+argp.add_argument("-i", required=True, dest="input", help="Input *.oct file")
+argp.add_argument("-c", default=100, type=int, help="Number of commands to execute")
+args = argp.parse_args()
 
 if __name__ == '__main__':
     irom = RamDevice("IROM0", 65536)
@@ -17,14 +23,10 @@ if __name__ == '__main__':
     dbus.attach(dram, 0)
     dbus.attach(printer, 65535)
 
-    if len(sys.argv) < 2:
-        print("Usage:\npymesm.py program.oct")
-        sys.exit(1)
-
-    load_oct(sys.argv[1], ibus, dbus)
+    load_oct(args.input, ibus, dbus)
 
     cpu = CPU(ibus, dbus)
-    cpu.run(40)
+    cpu.run(args.c)
 
     while cpu.running:
         cpu.step()
