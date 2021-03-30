@@ -106,6 +106,7 @@ class Tokenizer:
                 if s == '\n':
                     tok_txt = ""
                     state = 'NONE'
+                    self._line += 1
                 self._pos += 1
             elif state == 'STRING':
                 if s == '"':
