@@ -20,6 +20,30 @@ Instructions implemented by translating original MESM6 microcode.
 
 Most of the tests adopted from original MESM6 https://github.com/besm6/mesm6
 
+## Implemented CPU instructions
+
+* Load/store, register/register
+  * ATX, XTA, ATI, ITA, XTS, STX, STI, ITS
+* Arithmetic (as unsigned 32bit integers) 
+  * A+X, A-X, X-A, AVX, A/X, A*X, ARX
+* Shift
+  * ASX, ASN
+* Logic
+  * AAX, AOX, AEX
+* Address modifiers
+  * UTC, WTC
+* Set address modifier register
+  * UTM, VTM, MTJ, J+M
+* Branch
+  * VZM, V1M, VLM, VJM, UJ, U1A, UZA
+* Stop
+  * STOP
+    
+Unimplemented instructions:
+* MOD, AMX, APX, AUX, ACX, ANX, E+X, E-X, XTR, RTE, 
+* YTA, EXT, E+N, E-N, NTR
+* extracodes
+
 ## Running
 
 Let's build simple program: `exmaples/hello.asm`
