@@ -90,7 +90,7 @@ if __name__ == '__main__':
                 elif kwrd == 'ptr':
                     if name := t.get('IDENT'):
                         if op_addr := get_number(t):
-                            names[name] = (name.val, op_addr & 0xFFFF)
+                            names[name.val] = (name.val, op_addr & 0xFFFF)
                     else:
                         print(f"at line {line}: PTR: identifier required")
                         error_count += 1
@@ -159,7 +159,7 @@ if __name__ == '__main__':
                 elif name := t.get('IDENT'):
                     sym = name.val
                     if t.get('BRACE'):
-                        if addr := get_number(t):
+                        if not (addr := get_number(t)) is None:
                             op_offset = addr & 0xFFFF
                             if not t.get('BRACE'):
                                 print(f"at line {line}: ] brace required")
@@ -233,7 +233,7 @@ if __name__ == '__main__':
                 left = left_idx | left_op | left_addr
                 right_idx = irom[pc + 1][1] << 24
                 right_op = irom[pc + 1][2] << 16
-                right_op_name = op_names[irom[pc][2]]
+                right_op_name = op_names[irom[pc+1][2]]
                 right_addr = irom[pc + 1][3]
                 right = right_idx | right_op | right_addr
                 out.write(f"i {opc:>04X} {left:>08X} {right:>08X}\n")
