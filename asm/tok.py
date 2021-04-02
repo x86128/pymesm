@@ -52,9 +52,9 @@ class Tokenizer:
         while self._pos < self._len:
             s = self.source[self._pos]
             if state == 'NONE':
+                if s == "\n":
+                    self._line += 1
                 if s.isspace():
-                    if s == "\n":
-                        self._line += 1
                     self._pos += 1
                     continue
                 elif s.isalpha():
@@ -106,7 +106,8 @@ class Tokenizer:
                 if s == '\n':
                     tok_txt = ""
                     state = 'NONE'
-                self._pos += 1
+                else:
+                    self._pos += 1
             elif state == 'STRING':
                 if s == '"':
                     self._pos += 1

@@ -54,7 +54,7 @@ if __name__ == '__main__':
         if not t.get('BRACE'):
             return None
         while True:
-            if num := get_number(tok):
+            if not(num := get_number(tok)) is None:
                 result.append(num)
             else:
                 return None
@@ -118,12 +118,12 @@ if __name__ == '__main__':
                                 dram[DP] = ord(c)
                                 DP += 1
                         # array of "NUMBER"
-                        elif array := get_number_array(t):
+                        elif not (array := get_number_array(t)) is None:
                             for val in array:
                                 dram[DP] = val & 0xFFFFFFFF
                                 DP += 1
                         # single constant
-                        elif val := get_number(t):
+                        elif not (val := get_number(t)) is None:
                             dram[DP] = val & 0xFFFFFFFF
                             DP += 1
                         else:

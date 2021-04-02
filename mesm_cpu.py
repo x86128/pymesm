@@ -201,6 +201,8 @@ class CPU:
         self.set_mul()
 
     def op_asx(self):
+        if self.stack:
+            self.stack_add(-1)
         n = self.dbus.read(self.uaddr)
         result = self.acc
         if n >= 64:
@@ -376,6 +378,10 @@ class CPU:
             self.op_aox()
         elif self.op_code == OP_ARX:
             self.op_arx()
+        elif self.op_code == OP_ASN:
+            self.op_asn()
+        elif self.op_code == OP_ASX:
+            self.op_asx()
         elif self.op_code == OP_UTC:
             self.op_utc()
         elif self.op_code == OP_WTC:
