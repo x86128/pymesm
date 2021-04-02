@@ -1,5 +1,5 @@
 import array
-from logging import warning
+
 
 class Device:
     def __init__(self, name):
@@ -20,14 +20,14 @@ class RamDevice(Device):
     def read(self, address):
         if 0 <= address < self.size:
             return self.memory[address]
-        warning(f"READ out of bounds in {self.name} at address {address}.")
+        print(f"READ out of bounds in {self.name} at address {address}.")
         return 0
 
     def write(self, address, value):
         if 0 <= address < self.size:
             self.memory[address] = value
             return
-        warning(f"WRITE out of bounds in {self.name} at address {address}.")
+        print(f"WRITE out of bounds in {self.name} at address {address}.")
 
 
 class Printer(Device):
@@ -39,8 +39,9 @@ class Printer(Device):
 
 
 class Bus:
-    def __init__(self, name):
+    def __init__(self, name, trace=False):
         self.name = name
+        self.trace = trace
         self.mmaps = []
         self.devices = []
 
@@ -55,15 +56,22 @@ class Bus:
         self.devices.append(device)
 
     def read(self, address):
+        result = 0
         for i, mmap in enumerate(self.mmaps):
             if mmap[0] <= address <= mmap[1]:
-                return self.devices[i].read(address)
-        warning(f"READ out of bounds at BUS {self.name} at {address}.")
-        return 0
+                result = self.devices[i].read(address)
+                break
+        else:
+            print(f"READ out of bounds at BUS {self.name} at {address}.")
+        if self.trace:
+            print(f"{self.name}: RD from {address:>04X} val: {result:>016X}")
+        return result
 
     def write(self, address, value):
         for i, mmap in enumerate(self.mmaps):
             if mmap[0] <= address <= mmap[1]:
                 self.devices[i].write(address, value)
+                if self.trace:
+                    print(f"{self.name}: WR to {address:>04X} val: {value:>016X}")
                 return
-        warning(f"WRITE out of bounds at BUS {self.name} at {address}.")
+        print(f"WRITE out of bounds at BUS {self.name} at {address}.")

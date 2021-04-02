@@ -1,4 +1,3 @@
-from logging import info, warning
 from mesm_opcodes import *
 
 
@@ -57,9 +56,9 @@ class CPU:
     def omega(self):
         """
         case additive: ω = (A[41] != 0); /* A < 0 */ break;
-	    case multiplicative: ω = (A[48] != 1); /* abs(A) < 0.5 */ break;
-	    case logical: ω = (A[48:1] != 0); /* A != 0 */ break;
-	    case 0: ω = 1;
+        case multiplicative: ω = (A[48] != 1); /* abs(A) < 0.5 */ break;
+        case logical: ω = (A[48:1] != 0); /* A != 0 */ break;
+        case 0: ω = 1;
         """
         if self.f_log and self.acc != 0:
             return True
@@ -72,6 +71,8 @@ class CPU:
 
     def set_trace(self):
         self.trace = True
+        self.dbus.trace = True
+        self.ibus.trace = True
 
     def set_log(self):
         self.rr_reg = self.rr_reg & 0b11100011 | 0b100
@@ -108,168 +109,156 @@ class CPU:
             elif self.op_code == 0o41 and self.uaddr == 15:
                 self.stack = True
 
-    def mod_inc(self, index):
-        self.m[index] = (self.m[index] + 1) & 0xFFFF
+    def m_wr(self, i, val):
+        i = i & 0xF
+        if i != 0:
+            self.m[i] = val & 0xFFFF
+            if self.trace:
+                print(f"  M[{i}] = {self.m[i]:>04X}")
 
-    def mod_dec(self, index):
-        self.m[index] = (self.m[index] + 0xFFFF) & 0xFFFF
+    def m_rd(self, i):
+        return self.m[i & 0xF] & 0xFFFF
+
+    def acc_wr(self, val):
+        self.acc = val & 0xFFFFFFFF
+        if self.trace:
+            print(f"  ACC = {self.acc:>08X}")
+
+    def stack_add(self, val):
+        self.m_wr(15, self.m_rd(15) + val)
 
     def op_atx(self):
         self.dbus.write(self.uaddr, self.acc & 0xFFFFFFFF)
-        if self.trace:
-            print(f"  mem[{self.uaddr:>04X}] = {self.acc:>08X}")
         if self.stack:
-            self.mod_inc(15)
-            if self.trace:
-                print(f"  M[15] = {self.m[15]:>04X}")
+            self.stack_add(1)
 
     def op_ati(self):
-        t = self.uaddr & 0xF
-        if t != 0:
-            self.m[t] = self.acc & 0xFFFF
-            if self.trace:
-                print(f"  M[{t}] = {self.m[t]:>04X}")
+        self.m_wr(self.uaddr, self.acc)
 
     def op_ita(self):
-        t = self.uaddr & 0xF
-        self.acc = self.m[t]
-        if self.trace:
-            print(f"  ACC = {self.acc:>08X}")
+        self.acc_wr(self.m_rd(self.uaddr))
         self.set_log()
 
     def op_stx(self):
         self.dbus.write(self.uaddr, self.acc & 0xFFFFFFFF)
-        self.mod_dec(15)
-        self.acc = self.dbus.read(self.m[15]) & 0xFFFFFFFF
+        self.stack_add(-1)
+        self.acc_wr(self.dbus.read(self.m[15]))
         self.set_log()
 
     def op_sti(self):  # uh oh instruction
         if not self.stack:
-            self.mod_dec(15)
-            if self.trace:
-                print(f"  M[15] = {self.m[15]:>04X}")
-        mi = self.uaddr & 0xF
-        if mi != 0:
-            self.m[mi] = self.acc & 0xFFFF
-            if self.trace:
-                print(f"  M[{mi}] = {self.m[mi]:>04X}")
-        self.acc = self.dbus.read(self.m[15])
-        if self.trace:
-            print(f"  ACC = {self.acc:>08X}")
+            self.stack_add(-1)
+        self.m_wr(self.uaddr, self.acc)
+        self.acc_wr(self.dbus.read(self.m[15]))
         self.set_log()
 
     def op_its(self):
         self.dbus.write(self.m[15], self.acc & 0xFFFFFFFF)
-        self.mod_inc(15)
-        self.acc = self.m[self.uaddr & 0xF] & 0xFFFF
+        self.stack_add(1)
+        self.acc_wr(self.m_rd(self.uaddr))
         self.set_log()
 
     def op_xts(self):
         self.dbus.write(self.m[15], self.acc & 0xFFFFFFFF)
-        self.mod_inc(15)
-        self.acc = self.dbus.read(self.uaddr) & 0xFFFFFFFF
+        self.stack_add(1)
+        self.acc_wr(self.dbus.read(self.uaddr))
         self.set_log()
 
     def op_add(self):
         if self.stack:
-            self.mod_dec(15)
-        self.acc = (self.acc + self.dbus.read(self.uaddr)) & 0xFFFFFFFF
+            self.stack_add(-1)
+        self.acc_wr(self.acc + self.dbus.read(self.uaddr))
         self.set_add()
 
     def op_sub(self):
         if self.stack:
-            self.mod_dec(15)
-        self.acc = (self.acc - self.dbus.read(self.uaddr)) & 0xFFFFFFFF
+            self.stack_add(-1)
+        self.acc_wr(self.acc - self.dbus.read(self.uaddr))
         self.set_add()
 
     def op_rsub(self):
         if self.stack:
-            self.mod_dec(15)
-        self.acc = (self.dbus.read(self.uaddr) - self.acc) & 0xFFFFFFFF
+            self.stack_add(-1)
+        self.acc_wr(self.dbus.read(self.uaddr) - self.acc)
         self.set_add()
 
     def op_avx(self):
         if self.stack:
-            self.mod_dec(15)
-        self.acc = ((self.acc ^ 0xFFFFFFFF) + 1) & 0xFFFFFFFF
+            self.stack_add(-1)
+        self.acc_wr((self.acc ^ 0xFFFFFFFF) + 1)
         self.set_add()
 
     def op_div(self):
         if self.stack:
-            self.mod_dec(15)
-        self.acc = self.acc / (self.dbus.read(self.uaddr) & 0xFFFFFFFF)
+            self.stack_add(-1)
+        self.acc_wr(self.acc / (self.dbus.read(self.uaddr)))
         self.set_mul()
 
     def op_mul(self):
         if self.stack:
-            self.mod_dec(15)
-        self.acc = (self.acc * (self.dbus.read(self.uaddr) & 0xFFFFFFFF)) & 0xFFFFFFFF
+            self.stack_add(-1)
+        self.acc_wr(self.acc * (self.dbus.read(self.uaddr) & 0xFFFFFFFF))
         self.set_mul()
 
     def op_asx(self):
+        if self.stack:
+            self.stack_add(-1)
         n = self.dbus.read(self.uaddr)
+        result = self.acc
         if n >= 64:
-            self.acc >>= (n - 64)
+            result >>= (n - 64)
         else:
-            self.acc <<= (64 - n)
+            result <<= (64 - n)
+        self.acc_wr(result)
         self.set_log()
 
     def op_asn(self):
         n = self.uaddr
+        result = self.acc
         if n >= 64:
-            self.acc >>= (n - 64)
+            result >>= (n - 64)
         else:
-            self.acc <<= (64 - n)
+            result <<= (64 - n)
+        self.acc_wr(result)
         self.set_log()
 
     def op_xta(self):
         if self.stack:
-            self.mod_dec(15)
-            if self.trace:
-                print(f"  M[15] = {self.m[15]:>04X}")
-        self.acc = self.dbus.read(self.uaddr) & 0xFFFFFFFF
-        if self.trace:
-            print(f"  ACC = {self.acc:>08X}")
+            self.stack_add(-1)
+        self.acc_wr(self.dbus.read(self.uaddr))
         self.set_log()
 
     def op_aax(self):
         if self.stack:
-            self.mod_dec(15)
+            self.stack_add(-1)
         x = self.dbus.read(self.uaddr) & 0xFFFFFFFF
-        self.acc = self.acc & x
+        self.acc_wr(self.acc & x)
         self.set_log()
-        # info(f"ACC: {self.acc:>08X}")
 
     def op_arx(self):
         if self.stack:
-            self.mod_dec(15)
+            self.stack_add(-1)
         ua = self.acc & 0xFFFFFFFF
         ux = self.dbus.read(self.uaddr) & 0xFFFFFFFF
         t = ua + ux
         if t > 0xFFFFFFFF:
             t += 1
-        self.acc = t & 0xFFFFFFFF
+        self.acc_wr(t)
         self.set_mul()
 
     def op_aex(self):
         if self.stack:
-            self.mod_dec(15)
-            if self.trace:
-                print(f"  M[15] = {self.m[15]:>04X}")
+            self.stack_add(-1)
         x = self.dbus.read(self.uaddr) & 0xFFFFFFFF
-        self.acc = self.acc ^ x
-        if self.trace:
-            print(f"  ACC = {self.acc:>08X}, X = {x:>08X}")
+        self.acc_wr(self.acc ^ x)
         self.set_log()
-        # info(f"ACC: {self.acc:>08X}")
 
     def op_aox(self):
         if self.stack:
-            self.mod_dec(15)
+            self.stack_add(-1)
         x = self.dbus.read(self.uaddr) & 0xFFFFFFFF
-        self.acc = self.acc | x
+        self.acc_wr(self.acc | x)
         self.set_log()
-        # info(f"ACC: {self.acc:>08X}")
 
     def op_utc(self):
         self.c = self.uaddr
@@ -277,34 +266,21 @@ class CPU:
 
     def op_wtc(self):
         if self.stack:
-            self.mod_dec(15)
+            self.stack_add(-1)
         self.c = self.dbus.read(self.uaddr)
         self.c_active = True
 
     def op_utm(self):
-        t = self.op_indx & 0xF
-        if t != 0:
-            self.m[t] = self.uaddr
-            if self.trace:
-                print(f"  M[{t}] = {self.m[t]:>04X}")
+        self.m_wr(self.op_indx, self.uaddr)
 
     def op_vtm(self):
-        self.m[self.op_indx] = self.vaddr
-        if self.trace:
-            i = self.op_indx
-            print(f"  M[{i}] = {self.m[i]:>04X}")
+        self.m_wr(self.op_indx, self.vaddr)
 
     def op_mtj(self):
-        t = self.vaddr & 0xF
-        if t != 0:
-            self.m[t] = self.m[self.op_indx]
+        self.m_wr(self.vaddr, self.m_rd(self.op_indx))
 
     def op_jaddm(self):
-        t = self.vaddr & 0xF
-        if t != 0:
-            self.m[t] = (self.m[t] + self.m[self.op_indx]) & 0xFFFF
-            if self.trace:
-                print(f"  M[{t}] = {self.m[t]:>04X}")
+        self.m_wr(self.vaddr, self.m_rd(self.vaddr) + self.m_rd(self.op_indx))
 
     def op_vim(self):
         if self.m[self.op_indx] != 0:
@@ -319,17 +295,13 @@ class CPU:
     def op_vjm(self):
         self.pc_next = self.vaddr
         self.is_left = True
-        mi = self.op_indx & 0xF
-        if mi != 0:
-            self.m[mi] = self.pc + 1
+        self.m_wr(self.op_indx, self.pc + 1)
 
     def op_vlm(self):
-        mi = self.op_indx & 0xF
-        if self.m[mi] != 0:
+        if self.m_rd(self.op_indx) != 0:
             self.pc_next = self.vaddr
             self.is_left = True
-            if mi != 0:
-                self.m[mi] = (self.m[mi] + 1) & 0xFFFF
+            self.m_wr(self.op_indx, self.m_rd(self.op_indx) + 1)
 
     def op_stop(self):
         self.running = False
@@ -362,7 +334,7 @@ class CPU:
             print(f"{self.pc:>04X}: {OP_CODE[self.op_code]} {self.op_addr:>04X}")
         else:
             print(
-                f"{self.pc:>04X}: {OP_CODE[self.op_code]} {self.op_addr:>04X}(M{self.op_indx}={self.m[self.op_indx]:>04X})")
+                f"{self.pc:>04X}: {OP_CODE[self.op_code]} {self.op_addr:>04X},M{self.op_indx}")
 
     def step(self):
         self.commands -= 1
@@ -406,6 +378,10 @@ class CPU:
             self.op_aox()
         elif self.op_code == OP_ARX:
             self.op_arx()
+        elif self.op_code == OP_ASN:
+            self.op_asn()
+        elif self.op_code == OP_ASX:
+            self.op_asx()
         elif self.op_code == OP_UTC:
             self.op_utc()
         elif self.op_code == OP_WTC:
