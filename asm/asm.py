@@ -61,6 +61,7 @@ def pack_insn(indx, op, addr):
             halfword |= 1 << 18
             halfword |= addr & 0o07777
         else:  # unrepresentable address
+            print(f"WARN: unrepresentable address {addr:>05o}")
             return -1
     return halfword
 
@@ -71,7 +72,7 @@ if __name__ == '__main__':
 
     PC = 0
     DP = 0
-    irom = array.array('Q', [0] * 65536)
+    irom = array.array('Q', [0xFFFFFFFFFFFFFFFF] * 65536)
     dram = array.array('Q', [0xFFFFFFFFFFFFFFFF] * 32768)
 
     fix_list = []  # tuples(pc, 'name', offset)
@@ -130,7 +131,6 @@ if __name__ == '__main__':
                                 DP += 1
                         # array of "NUMBER"
                         elif array := t.get_number_array():
-                            print("arr", array)
                             for val in array:
                                 dram[DP] = val & MASK48
                                 DP += 1
@@ -212,7 +212,7 @@ if __name__ == '__main__':
                     irom[PC] = pack_insn(op_indx, op_codes[op], 0)
                     fix_list.append(Fix(PC, op_addr[0], op_addr[1]))
                 else:
-                    irom[PC] = pack_insn(op_indx, op_codes[op], op_addr)
+                    irom[PC] = pack_insn(op_indx, op_codes[op], op_addr & MASK15)
                 PC += 1
             else:
                 print(f"line: {line}: Unknown assembler command: {kwrd}")
@@ -222,7 +222,10 @@ if __name__ == '__main__':
             print(f"near line {t.curr.line}: keyword or command required")
             error_count += 1
             break
-
+    # if after assembly PC points to right instruction, set it to UTC 0 to fill word
+    if PC & 1 == 1:
+        irom[PC] = pack_insn(0, op_codes['utc'], 0)  # UTC 0
+        PC += 1
     # check for errors
     if error_count > 0:
         print(f"Assembly errors count: {error_count}")
@@ -231,7 +234,7 @@ if __name__ == '__main__':
     # do fixups: fix = tuple(pc, sym_name, offset)
     for fix in fix_list:
         if fix.sym in names:
-            addr = names[fix.sym] + fix.offset
+            addr = (names[fix.sym] + fix.offset) & MASK15
             # short address instructions require address range check
             if irom[fix.pc] & (1 << 19) == 0:
                 if addr >= 0o70000:
@@ -254,7 +257,7 @@ if __name__ == '__main__':
     with open(output_file, 'wt') as out:
         # do irom print out
         for pc in range(0, 65536, 2):
-            if irom[pc] != 0:
+            if irom[pc] != 0xFFFFFFFFFFFFFFFF:
                 opc = pc >> 1
                 out.write(f"i {opc:>05o} {irom[pc]:>08o} {irom[pc + 1]:>08o}\n")
                 if args.listing:

@@ -1,13 +1,41 @@
-from mesm_opcodes import *
+import array
+
+MASK12 = 0xFFF
+MASK15 = 0x7FFF
+MASK24 = 0xFFFFFF
+MASK48 = 0xFFFFFFFFFFFF
+BIT19 = 1 << 19
+BIT18 = 1 << 18
+
+op_names = ['atx', 'stx', 'mod', 'xts', 'add', 'sub', 'rsub', 'amx',
+            'xta', 'aax', 'aex', 'arx', 'avx', 'aox', 'div', 'mul',
+            'apx', 'aux', 'acx', 'anx', 'eaddx', 'esubx', 'asx', 'xtr',
+            'rte', 'yta', 'e32', 'e33', 'eaddn', 'esub', 'asn', 'ntr',
+            'ati', 'sti', 'ita', 'its', 'mtj', 'jaddm', 'e46', 'e47',
+            'e50', 'e51', 'e52', 'e53', 'e54', 'e55', 'e56', 'e57',
+            'e60', 'e61', 'e62', 'e63', 'e64', 'e65', 'e66', 'e67',
+            'e70', 'e71', 'e72', 'e73', 'e74', 'e75', 'e76', 'e77',
+            'e20', 'e21', 'utc', 'wtc', 'vtm', 'utm', 'uza', 'uia',
+            'uj', 'vjm', 'ij', 'stop', 'vzm', 'vim', 'e36', 'vlm']
+op_codes = {op: i for i, op in enumerate(op_names)}
+
+op_unimplemented = ['mod', 'amx', 'apx', 'aux', 'acx', 'anx', 'eaddx',
+                    'esubx', 'eaddn', 'xtr', 'rte', 'yta', 'e32', 'e33',
+                    'e46', 'e47', 'e36', 'e20', 'e21', 'esub', 'esubx', 'ntr',
+                    'e50', 'e51', 'e52', 'e53', 'e54', 'e55', 'e56', 'e57',
+                    'e60', 'e61', 'e62', 'e63', 'e64', 'e65', 'e66', 'e67',
+                    'e70', 'e71', 'e72', 'e73', 'e74', 'e75', 'e76', 'e77']
 
 
 class CPU:
     def __init__(self, ibus, dbus):
         self.pc = 1
-        self.running = False
         self.commands = 100
         self.ibus = ibus
         self.dbus = dbus
+
+        self.running = False
+        self.failure = False
 
         self.interrupt = False
         self.c = 0
@@ -16,9 +44,9 @@ class CPU:
         self.acc = 0
 
         # index registers
-        self._m = [0] * 16
-        self._k = [0] * 16
-        self.m = self._m
+        self._m = array.array('H', [0] * 16)
+        self._k = array.array('H', [0] * 16)
+        self.m_reg = self._m
 
         # instruction cache
         self.cmd_cache = 0
@@ -36,9 +64,28 @@ class CPU:
 
         self.trace = False
 
+        for op in op_unimplemented:
+            setattr(self, f"op_{op}", self.op_unimpl)
+
+        self._opcodes = [getattr(self, f"op_{op}") for op in op_names]
+
+    @property
+    def m(self):
+        return self.m_reg[self.op_indx]
+
+    @property
+    def sp(self):
+        return self.m_reg[15] & MASK15
+
+    @sp.setter
+    def sp(self, addr):
+        self.m_reg[15] = addr & MASK15
+        if self.trace:
+            print(f"  M[15] = {self.m_reg[15]:>05o}")
+
     @property
     def uaddr(self):
-        return (self.m[self.op_indx & 0xF] + self.vaddr) & 0xFFFF
+        return (self.m + self.vaddr) & MASK15
 
     @property
     def f_log(self):
@@ -88,16 +135,22 @@ class CPU:
 
     def decode(self):
         if self.is_left:
-            w = (self.cmd_cache >> 32) & 0xFFFFFFFF
+            w = (self.cmd_cache >> 24) & MASK24
         else:
-            w = self.cmd_cache & 0xFFFFFFFF
+            w = self.cmd_cache & MASK24
 
-        self.op_indx = (w >> 24) & 0xF
-        self.op_code = (w >> 16) & 0xFF
-        self.op_addr = w & 0xFFFF
+        self.op_indx = (w >> 20) & 0xF
+        if w & BIT19 == 0:  # short address command
+            self.op_code = (w >> 12) & 0o77
+            self.op_addr = w & MASK12
+            if w & BIT18 != 0:  # address is extended
+                self.op_addr |= 0o70000
+        else:  # long address command
+            self.op_code = ((w >> 15) & 0o37) + 48
+            self.op_addr = w & MASK15
 
         if self.c_active:
-            self.vaddr = (self.op_addr + self.c) & 0xFFFF
+            self.vaddr = (self.op_addr + self.c) & MASK15
         else:
             self.vaddr = self.op_addr
         self.c_active = False
@@ -112,25 +165,22 @@ class CPU:
     def m_wr(self, i, val):
         i = i & 0xF
         if i != 0:
-            self.m[i] = val & 0xFFFF
+            self.m_reg[i] = val & MASK15
             if self.trace:
-                print(f"  M[{i}] = {self.m[i]:>04X}")
+                print(f"  M[{i}] = {self.m_reg[i]:>05o}")
 
     def m_rd(self, i):
-        return self.m[i & 0xF] & 0xFFFF
+        return self.m_reg[i & 0xF] & MASK15
 
     def acc_wr(self, val):
-        self.acc = val & 0xFFFFFFFF
+        self.acc = val & MASK48
         if self.trace:
-            print(f"  ACC = {self.acc:>08X}")
-
-    def stack_add(self, val):
-        self.m_wr(15, self.m_rd(15) + val)
+            print(f"  ACC = {self.acc:>016o}")
 
     def op_atx(self):
-        self.dbus.write(self.uaddr, self.acc & 0xFFFFFFFF)
+        self.dbus.write(self.uaddr, self.acc)
         if self.stack:
-            self.stack_add(1)
+            self.sp += 1
 
     def op_ati(self):
         self.m_wr(self.uaddr, self.acc)
@@ -140,69 +190,69 @@ class CPU:
         self.set_log()
 
     def op_stx(self):
-        self.dbus.write(self.uaddr, self.acc & 0xFFFFFFFF)
-        self.stack_add(-1)
-        self.acc_wr(self.dbus.read(self.m[15]))
+        self.dbus.write(self.uaddr, self.acc)
+        self.sp -= 1
+        self.acc_wr(self.dbus.read(self.sp))
         self.set_log()
 
     def op_sti(self):  # uh oh instruction
         if not self.stack:
-            self.stack_add(-1)
+            self.sp -= 1
         self.m_wr(self.uaddr, self.acc)
-        self.acc_wr(self.dbus.read(self.m[15]))
+        self.acc_wr(self.dbus.read(self.sp))
         self.set_log()
 
     def op_its(self):
-        self.dbus.write(self.m[15], self.acc & 0xFFFFFFFF)
-        self.stack_add(1)
+        self.dbus.write(self.sp, self.acc)
+        self.sp += 1
         self.acc_wr(self.m_rd(self.uaddr))
         self.set_log()
 
     def op_xts(self):
-        self.dbus.write(self.m[15], self.acc & 0xFFFFFFFF)
-        self.stack_add(1)
+        self.dbus.write(self.sp, self.acc)
+        self.sp += 1
         self.acc_wr(self.dbus.read(self.uaddr))
         self.set_log()
 
     def op_add(self):
         if self.stack:
-            self.stack_add(-1)
+            self.sp -= 1
         self.acc_wr(self.acc + self.dbus.read(self.uaddr))
         self.set_add()
 
     def op_sub(self):
         if self.stack:
-            self.stack_add(-1)
+            self.sp -= 1
         self.acc_wr(self.acc - self.dbus.read(self.uaddr))
         self.set_add()
 
     def op_rsub(self):
         if self.stack:
-            self.stack_add(-1)
+            self.sp -= 1
         self.acc_wr(self.dbus.read(self.uaddr) - self.acc)
         self.set_add()
 
     def op_avx(self):
         if self.stack:
-            self.stack_add(-1)
-        self.acc_wr((self.acc ^ 0xFFFFFFFF) + 1)
+            self.sp -= 1
+        self.acc_wr(-self.acc)
         self.set_add()
 
     def op_div(self):
         if self.stack:
-            self.stack_add(-1)
+            self.sp -= 1
         self.acc_wr(self.acc / (self.dbus.read(self.uaddr)))
         self.set_mul()
 
     def op_mul(self):
         if self.stack:
-            self.stack_add(-1)
-        self.acc_wr(self.acc * (self.dbus.read(self.uaddr) & 0xFFFFFFFF))
+            self.sp -= 1
+        self.acc_wr(self.acc * self.dbus.read(self.uaddr))
         self.set_mul()
 
     def op_asx(self):
         if self.stack:
-            self.stack_add(-1)
+            self.sp -= 1
         n = self.dbus.read(self.uaddr)
         result = self.acc
         if n >= 64:
@@ -224,39 +274,39 @@ class CPU:
 
     def op_xta(self):
         if self.stack:
-            self.stack_add(-1)
+            self.sp -= 1
         self.acc_wr(self.dbus.read(self.uaddr))
         self.set_log()
 
     def op_aax(self):
         if self.stack:
-            self.stack_add(-1)
-        x = self.dbus.read(self.uaddr) & 0xFFFFFFFF
+            self.sp -= 1
+        x = self.dbus.read(self.uaddr)
         self.acc_wr(self.acc & x)
         self.set_log()
 
     def op_arx(self):
         if self.stack:
-            self.stack_add(-1)
-        ua = self.acc & 0xFFFFFFFF
-        ux = self.dbus.read(self.uaddr) & 0xFFFFFFFF
+            self.sp -= 1
+        ua = self.acc
+        ux = self.dbus.read(self.uaddr)
         t = ua + ux
-        if t > 0xFFFFFFFF:
+        if t > MASK48:
             t += 1
         self.acc_wr(t)
         self.set_mul()
 
     def op_aex(self):
         if self.stack:
-            self.stack_add(-1)
-        x = self.dbus.read(self.uaddr) & 0xFFFFFFFF
+            self.sp -= 1
+        x = self.dbus.read(self.uaddr)
         self.acc_wr(self.acc ^ x)
         self.set_log()
 
     def op_aox(self):
         if self.stack:
-            self.stack_add(-1)
-        x = self.dbus.read(self.uaddr) & 0xFFFFFFFF
+            self.sp -= 1
+        x = self.dbus.read(self.uaddr)
         self.acc_wr(self.acc | x)
         self.set_log()
 
@@ -266,8 +316,8 @@ class CPU:
 
     def op_wtc(self):
         if self.stack:
-            self.stack_add(-1)
-        self.c = self.dbus.read(self.uaddr)
+            self.sp -= 1
+        self.c = self.dbus.read(self.uaddr) & MASK15
         self.c_active = True
 
     def op_utm(self):
@@ -277,18 +327,18 @@ class CPU:
         self.m_wr(self.op_indx, self.vaddr)
 
     def op_mtj(self):
-        self.m_wr(self.vaddr, self.m_rd(self.op_indx))
+        self.m_wr(self.vaddr, self.m)
 
     def op_jaddm(self):
-        self.m_wr(self.vaddr, self.m_rd(self.vaddr) + self.m_rd(self.op_indx))
+        self.m_wr(self.vaddr, self.m_rd(self.vaddr) + self.m)
 
     def op_vim(self):
-        if self.m[self.op_indx] != 0:
+        if self.m != 0:
             self.pc_next = self.vaddr
             self.is_left = True
 
     def op_vzm(self):
-        if self.m[self.op_indx] == 0:
+        if self.m == 0:
             self.pc_next = self.vaddr
             self.is_left = True
 
@@ -298,17 +348,18 @@ class CPU:
         self.m_wr(self.op_indx, self.pc + 1)
 
     def op_vlm(self):
-        if self.m_rd(self.op_indx) != 0:
+        if self.m != 0:
             self.pc_next = self.vaddr
             self.is_left = True
-            self.m_wr(self.op_indx, self.m_rd(self.op_indx) + 1)
+            self.m_wr(self.op_indx, self.m + 1)
 
     def op_stop(self):
         self.running = False
-        print(f"CPU halted at {self.pc:>04X} with {self.op_addr:>04X}")
+        print(f"CPU halted at {self.pc:>05o} with {self.op_addr:>05o}")
         if self.op_addr == 0o12345:
             print("Success")
         elif self.op_addr == 0o76543:
+            self.failure = True
             print("Failure")
 
     def op_uj(self):
@@ -329,15 +380,19 @@ class CPU:
             self.pc_next = self.uaddr
             self.is_left = True
 
+    def op_unimpl(self):
+        self.running = False
+        print(f"Unimplemented instruction at: {self.pc}")
+        self.print_insn()
+
     def print_insn(self):
         if self.op_indx == 0:
-            print(f"{self.pc:>04X}: {OP_CODE[self.op_code]} {self.op_addr:>04X}")
+            print(f"{self.pc:>05o}: {op_names[self.op_code]} {self.op_addr:>05o}")
         else:
             print(
-                f"{self.pc:>04X}: {OP_CODE[self.op_code]} {self.op_addr:>04X},M{self.op_indx}")
+                f"{self.pc:>05o}: {op_names[self.op_code]} {self.op_addr:>05o},M{self.op_indx}")
 
     def step(self):
-        self.commands -= 1
         if self.commands <= 0:
             self.running = False
         # FETCH
@@ -356,68 +411,10 @@ class CPU:
         if self.trace:
             self.print_insn()
 
-        if self.op_code == OP_ATX:
-            self.op_atx()
-        elif self.op_code == OP_ATI:
-            self.op_ati()
-        elif self.op_code == OP_ITA:
-            self.op_ita()
-        elif self.op_code == OP_STI:
-            self.op_sti()
-        elif self.op_code == OP_ITS:
-            self.op_its()
-        elif self.op_code == OP_XTA:
-            self.op_xta()
-        elif self.op_code == OP_XTS:
-            self.op_xts()
-        elif self.op_code == OP_AAX:
-            self.op_aax()
-        elif self.op_code == OP_AEX:
-            self.op_aex()
-        elif self.op_code == OP_AOX:
-            self.op_aox()
-        elif self.op_code == OP_ARX:
-            self.op_arx()
-        elif self.op_code == OP_ASN:
-            self.op_asn()
-        elif self.op_code == OP_ASX:
-            self.op_asx()
-        elif self.op_code == OP_UTC:
-            self.op_utc()
-        elif self.op_code == OP_WTC:
-            self.op_wtc()
-        elif self.op_code == OP_UTM:
-            self.op_utm()
-        elif self.op_code == OP_VTM:
-            self.op_vtm()
-        elif self.op_code == OP_MTJ:
-            self.op_mtj()
-        elif self.op_code == OP_JADDM:
-            self.op_jaddm()
-        elif self.op_code == OP_VIM:
-            self.op_vim()
-        elif self.op_code == OP_VZM:
-            self.op_vzm()
-        elif self.op_code == OP_VJM:
-            self.op_vjm()
-        elif self.op_code == OP_VLM:
-            self.op_vlm()
-        elif self.op_code == OP_IJ:
-            self.op_ij()
-        elif self.op_code == OP_STOP:
-            self.op_stop()
-        elif self.op_code == OP_UJ:
-            self.op_uj()
-        elif self.op_code == OP_UIA:
-            self.op_uia()
-        elif self.op_code == OP_UZA:
-            self.op_uza()
-        else:
-            self.running = False
-            print("Unknown instruction at:")
-            self.print_insn()
+        self._opcodes[self.op_code]()
 
         self.pc = self.pc_next
+        self.commands -= 1
 
     def run(self, num=100):
         self.commands = num

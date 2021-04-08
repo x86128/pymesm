@@ -2,6 +2,7 @@
 # Test for instructions ATX 0(0), XTA 0(0), ATI 0(0), ITA 0(0).
 # Address 0 and register m0 should always return 0.
 #
+org 1
 ptr     start   1
         vtm     -1,2
         ita     2

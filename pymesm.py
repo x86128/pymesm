@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import sys
 from mesm_devs import Bus, RamDevice, Printer
 from mesm_cpu import CPU
 from mesm_utils import load_oct
@@ -34,3 +35,7 @@ if __name__ == '__main__':
         cpu.step()
 
     print("Simulation finished.")
+    if cpu.failure:
+        sys.exit(1)
+    else:
+        sys.exit(0)
