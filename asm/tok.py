@@ -8,6 +8,10 @@ class Token:
     val: str
     line: int
 
+    @property
+    def as_num(self):
+        return eval(self.val)
+
 
 class Tokenizer:
 
@@ -119,3 +123,33 @@ class Tokenizer:
                 print(f"line: {self._line}: Unknown state at {state}")
                 sys.exit(1)
         self._next = Token(state, tok_txt, self._line)
+
+    def get_number(self):
+        # try unary first "- NUMBER"
+        if binop := self.get('BINOP'):
+            if num := self.get('NUMBER'):
+                return Token('NUMBER', binop.val + num.val, binop.line)
+            else:
+                return None
+        # then just "NUMBER"
+        elif num := self.get('NUMBER'):
+            return num
+        else:
+            return None
+
+    def get_number_array(self):
+        result = []
+        if not self.get('BRACE'):
+            return None
+        while True:
+            if num := self.get_number():
+                result.append(num.as_num)
+            else:
+                return None
+            if self.get('COMMA'):
+                continue
+            elif self.get('BRACE'):
+                break
+            else:
+                return None
+        return result
