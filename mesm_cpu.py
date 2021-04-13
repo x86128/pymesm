@@ -1,11 +1,20 @@
 import array
+from math import ldexp, frexp
 
+MASK7 = 0x7F
 MASK12 = 0xFFF
 MASK15 = 0x7FFF
 MASK24 = 0xFFFFFF
+MASK40 = 0x0FFFFFFFFFF
+MASK41 = 0x1FFFFFFFFFF
+MASK42 = 0x3FFFFFFFFFF
 MASK48 = 0xFFFFFFFFFFFF
-BIT19 = 1 << 19
-BIT18 = 1 << 18
+
+BIT20 = 1 << 19
+BIT19 = 1 << 18
+BIT40 = 1 << 39
+BIT41 = 1 << 40
+BIT42 = 1 << 41
 
 op_names = ['atx', 'stx', 'mod', 'xts', 'add', 'sub', 'rsub', 'amx',
             'xta', 'aax', 'aex', 'arx', 'avx', 'aox', 'div', 'mul',
@@ -20,11 +29,62 @@ op_names = ['atx', 'stx', 'mod', 'xts', 'add', 'sub', 'rsub', 'amx',
 op_codes = {op: i for i, op in enumerate(op_names)}
 
 op_unimplemented = ['mod', 'amx', 'apx', 'aux', 'acx', 'anx', 'eaddx',
-                    'esubx', 'eaddn', 'xtr', 'rte', 'yta', 'e32', 'e33',
-                    'e46', 'e47', 'e36', 'e20', 'e21', 'esub', 'esubx', 'ntr',
+                    'esubx', 'eaddn', 'xtr', 'rte', 'e32', 'e33',
+                    'e46', 'e47', 'e36', 'e20', 'e21', 'esub', 'esubx',
                     'e50', 'e51', 'e52', 'e53', 'e54', 'e55', 'e56', 'e57',
                     'e60', 'e61', 'e62', 'e63', 'e64', 'e65', 'e66', 'e67',
                     'e70', 'e71', 'e72', 'e73', 'e74', 'e75', 'e76', 'e77']
+
+
+def tobesm(x):
+    m, e = frexp(x)
+
+    if m < 0:
+        m = int(-m * BIT41)
+        m = ((m ^ MASK41) + 1) & MASK41
+    else:
+        m = int(m * BIT41)
+
+    e += 64
+    # нормализуем влево, если 41-й и 40-й биты отличаются
+    while (m & BIT41 == 0) == (m & BIT40 == 0):
+        m = (m << 1) & MASK41
+        e -= 1
+        if e < 0:
+            break
+    if e < 0:  # underflow
+        return 0
+
+    # упаковываем число
+    e &= 0o177
+    m &= MASK41
+    return (e << 41) | m
+
+
+def frombesm(x):
+    e, m = (x & 0xFE0000000000) >> 41, x & MASK41
+    if m & BIT41:
+        m = -float(- m & MASK41)
+    return ldexp(m, e - 64 - 40)
+
+
+def norm(self, exp, mnt, rmr, rnd_rq):
+    rounded = False
+    if self.norm_ena:
+        while (mnt & BIT41 == 0) == (mnt & BIT40 == 0):
+            mnt = (mnt << 1) & MASK42
+            if rmr & 0x8000000000:
+                mnt |= 1
+                rounded = True
+            rmr = (rmr << 1) & MASK40
+            exp -= 1
+            if exp < 0:
+                break
+    if exp < 0:
+        return 0, 0
+    if self.round_ena and not rounded:
+        mnt |= 1
+    return exp, mnt
 
 
 class CPU:
@@ -42,6 +102,7 @@ class CPU:
         self.c_active = False
 
         self.acc = 0
+        self.rmr = 0
 
         # index registers
         self._m = array.array('H', [0] * 16)
@@ -107,10 +168,10 @@ class CPU:
         case logical: ω = (A[48:1] != 0); /* A != 0 */ break;
         case 0: ω = 1;
         """
-        if self.f_log and self.acc != 0:
-            return True
-        elif self.f_add and self.acc >= 0x80000000:
-            return True
+        if self.f_log:
+            return self.acc != 0
+        elif self.f_add:
+            return self.acc & BIT41 != 0
         elif self.f_mul and self.acc < 0x80000000:
             return True
         else:
@@ -130,6 +191,14 @@ class CPU:
     def set_add(self):
         self.rr_reg = self.rr_reg & 0b11100011 | 0b10000
 
+    @property
+    def norm_ena(self):
+        return self.rr_reg & 1 == 0
+
+    @property
+    def round_ena(self):
+        return self.rr_reg & 2 == 0
+
     def fetch(self):
         self.cmd_cache = self.ibus.read(self.pc)
 
@@ -140,10 +209,10 @@ class CPU:
             w = self.cmd_cache & MASK24
 
         self.op_indx = (w >> 20) & 0xF
-        if w & BIT19 == 0:  # short address command
+        if w & BIT20 == 0:  # short address command
             self.op_code = (w >> 12) & 0o77
             self.op_addr = w & MASK12
-            if w & BIT18 != 0:  # address is extended
+            if w & BIT19 != 0:  # address is extended
                 self.op_addr |= 0o70000
         else:  # long address command
             self.op_code = ((w >> 15) & 0o37) + 48
@@ -175,7 +244,12 @@ class CPU:
     def acc_wr(self, val):
         self.acc = val & MASK48
         if self.trace:
-            print(f"  ACC = {self.acc:>016o}")
+            print(f"  ACC = {self.acc:>016o} ({frombesm(self.acc)})")
+
+    def rmr_wr(self, rmr):
+        self.rmr = rmr
+        if self.trace:
+            print(f"  RMR = {self.rmr:>016o}")
 
     def op_atx(self):
         self.dbus.write(self.uaddr, self.acc)
@@ -213,24 +287,6 @@ class CPU:
         self.sp += 1
         self.acc_wr(self.dbus.read(self.uaddr))
         self.set_log()
-
-    def op_add(self):
-        if self.stack:
-            self.sp -= 1
-        self.acc_wr(self.acc + self.dbus.read(self.uaddr))
-        self.set_add()
-
-    def op_sub(self):
-        if self.stack:
-            self.sp -= 1
-        self.acc_wr(self.acc - self.dbus.read(self.uaddr))
-        self.set_add()
-
-    def op_rsub(self):
-        if self.stack:
-            self.sp -= 1
-        self.acc_wr(self.dbus.read(self.uaddr) - self.acc)
-        self.set_add()
 
     def op_avx(self):
         if self.stack:
@@ -379,6 +435,130 @@ class CPU:
         if not self.omega:
             self.pc_next = self.uaddr
             self.is_left = True
+
+    def op_ntr(self):
+        self.rr_reg = self.uaddr & 0x3F
+        if self.trace:
+            print(f"  RR = {self.rr_reg:>06b}")
+
+    def negate(self, x):
+        e, m = (x >> 41) & MASK7, x & MASK41
+        if m & BIT41:
+            m |= BIT42
+        m = ((MASK42 ^ m) + 1) & MASK42
+
+        if (m & BIT42 == 0) != (m & BIT41 == 0):
+            e += 1
+            if m & 1:
+                self.rmr = (self.rmr >> 1) | (1 << 39)
+            m >>= 1
+        # нормализуем влево, если 41-й и 40-й биты отличаются
+        while self.norm_ena and (m & BIT41 == 0) == (m & BIT40 == 0):
+            m = (m << 1) & MASK41
+            e -= 1
+            if e < -1:
+                break
+        return e, m
+
+    def op_add(self):
+        if self.stack:
+            self.sp -= 1
+        x = self.dbus.read(self.uaddr)
+        e, m = (x >> 41) & MASK7, x & MASK41
+        self.add(self.acc, e, m)
+        self.set_add()
+
+    def op_sub(self):
+        if self.stack:
+            self.sp -= 1
+        x = self.dbus.read(self.uaddr)
+        e, m = self.negate(x)
+        self.add(self.acc, e, m)
+        self.set_add()
+
+    def op_rsub(self):
+        if self.stack:
+            self.sp -= 1
+        e, m = self.negate(self.acc)
+        self.add(self.dbus.read(self.uaddr), e, m)
+        self.set_add()
+
+    def add(self, a, b_exp, b_mnt):
+        a_exp, a_mnt = (a >> 41) & MASK7, a & MASK41
+        # b_exp, b_mnt = (b >> 41) & MASK7, b & MASK41
+        if a_exp < b_exp:
+            a_exp, b_exp = b_exp, a_exp
+            a_mnt, b_mnt = b_mnt, a_mnt
+
+        a_sgn = (a_mnt & BIT41) != 0
+        b_sgn = (b_mnt & BIT41) != 0
+
+        rmr = self.rmr & MASK40
+        rnd_rq = 0
+        while a_exp > b_exp:
+            b_exp += 1
+            if b_mnt & 1:
+                rnd_rq |= 1
+            rmr = rmr >> 1 | ((b_mnt & 1) << 39)
+            b_mnt >>= 1
+            if b_sgn:
+                b_mnt |= BIT41
+
+        if b_sgn:
+            b_mnt |= BIT42
+        if a_sgn:
+            a_mnt |= BIT42
+
+        a_mnt = (a_mnt + b_mnt) & MASK42
+
+        # шаг нормализации вправо после сложения
+        if (a_mnt & BIT42 == 0) != (a_mnt & BIT41 == 0):
+            a_exp += 1
+            rmr = rmr >> 1 | ((a_mnt & 1) << 39)
+            if a_mnt & 1:
+                rnd_rq |= 1
+            a_mnt >>= 1
+            if a_exp > 0o177:
+                print("WARN: Exponent overflow")
+                self.failure = True
+                a_exp = 0o177
+
+        if self.norm_ena:
+            while (a_mnt & BIT40 == 0) == (a_mnt & BIT41 == 0):
+                a_mnt = (a_mnt << 1) & MASK41
+                if rmr & BIT40:
+                    rnd_rq = 0
+                    a_mnt |= 1
+                rmr = (rmr << 1) & MASK40
+                a_exp -= 1
+                if a_exp < 0:
+                    a_exp, a_mnt = 0, 0
+                    rmr = 0
+                    break
+
+        if self.round_ena and rnd_rq:
+            a_mnt |= 1
+
+        self.rmr_wr(rmr)
+        self.acc_wr((a_exp << 41) | (a_mnt & MASK41))
+
+    def op_yta(self):
+        if self.f_log:
+            self.acc_wr(self.rmr)
+        else:
+            e = ((self.acc >> 41) & 0x7F + self.uaddr & 0x7F - 64) & 0x7F
+            m = self.rmr & MASK40
+            while self.norm_ena and (m & BIT41 == 0) == (m & BIT40 == 0):
+                m = (m << 1) & MASK41
+                e -= 1
+                if e < 0:
+                    break
+            if e < 0:  # underflow
+                e, m = 0, 0
+            # упаковываем число
+            e &= 0o177
+            m &= MASK41
+            self.acc_wr((e << 41) | m)
 
     def op_unimpl(self):
         self.running = False
