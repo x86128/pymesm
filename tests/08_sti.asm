@@ -26,18 +26,18 @@ org 1
 # STI (15) when M15=15: special case
 #
         xta     cful
-        atx     49000
-        atx     49001
+        atx     0o70776
+        atx     0o70777
         xta     0
-        vtm     49000,15
+        vtm     0o70776,15
         xts     0,15
         aex     cful
         uia     fail
 
-        xta     49000
+        xta     0o70776
         uia     fail
         vtm     15,15
-        xta     b49001
+        xta     b70777
         sti     0,15
         aex     cful
         uia     fail
@@ -49,7 +49,7 @@ lbl     fail
 
 dorg    0o2000
 arr     ones    0xFFFF
-arr     b49001  49001
+arr     b70777  0o70777
 arr     cful    0o7777777777777777
 arr     ws      [0o11, 0o22, 0o33]
 

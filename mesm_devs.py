@@ -1,5 +1,7 @@
 import array
 
+MASK48 = 0xFFFFFFFFFFFF
+
 
 class Device:
     def __init__(self, name):
@@ -19,13 +21,13 @@ class RamDevice(Device):
 
     def read(self, address):
         if 0 <= address < self.size:
-            return self.memory[address]
+            return self.memory[address] & MASK48
         print(f"READ out of bounds in {self.name} at address {address}.")
         return 0
 
     def write(self, address, value):
         if 0 <= address < self.size:
-            self.memory[address] = value
+            self.memory[address] = value & MASK48
             return
         print(f"WRITE out of bounds in {self.name} at address {address}.")
 
@@ -57,6 +59,8 @@ class Bus:
 
     def read(self, address):
         result = 0
+        if address == 0:
+            return 0
         for i, mmap in enumerate(self.mmaps):
             if mmap[0] <= address <= mmap[1]:
                 result = self.devices[i].read(address)
@@ -64,14 +68,16 @@ class Bus:
         else:
             print(f"READ out of bounds at BUS {self.name} at {address}.")
         if self.trace:
-            print(f"{self.name}: RD from {address:>04X} val: {result:>016X}")
+            print(f"{self.name}: RD from {address:>05o} val: {result:>016o}")
         return result
 
     def write(self, address, value):
+        if address == 0:
+            return
         for i, mmap in enumerate(self.mmaps):
             if mmap[0] <= address <= mmap[1]:
                 self.devices[i].write(address, value)
                 if self.trace:
-                    print(f"{self.name}: WR to {address:>04X} val: {value:>016X}")
+                    print(f"{self.name}: WR to {address:>05o} val: {value:>016o}")
                 return
         print(f"WRITE out of bounds at BUS {self.name} at {address}.")

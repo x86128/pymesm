@@ -2,21 +2,21 @@
 # Test for instructions ASN, ASX.
 #
 org     1
-        vtm     -32,12
-        vtm     32,11
+        vtm     -48,12
+        vtm     48,11
 lbl     a
-        xta     bit32
+        xta     bit48
         asn     63,11         # влево на 1 разряд
         aex     masks,11
         uia     fail
         utm     -1,11
         vlm     a,12
 #
-        vtm     -32,12
-        vtm     32,11
+        vtm     -48,12
+        vtm     48,11
 lbl     b
         xta     i1
-        asn     32,11     # влево на 15
+        asn     16,11     # влево на 48
         aex     masks,11
         uia     fail
         utm     -1,11
@@ -37,10 +37,27 @@ lbl     fail
         stop    0o76543,2
 #-------------------------
 dorg    0o2000                          # данные с адреса 2000
-arr     cful    0xFFFFFFFF
-arr     chess   [0xAAAAAAAA, 0x55555555]
-arr     bit32   0x80000000
+arr     cful     0xFFFFFFFFFFFF
+arr     chess   [0xAAAAAAAAAAAA,
+                 0x555555555555]
+arr     bit48   0o4000000000000000
 arr     masks   [0,
+                0x800000000000,
+                0x400000000000,
+                0x200000000000,
+                0x100000000000,
+                0x80000000000,
+                0x40000000000,
+                0x20000000000,
+                0x10000000000,
+                0x8000000000,
+                0x4000000000,
+                0x2000000000,
+                0x1000000000,
+                0x800000000,
+                0x400000000,
+                0x200000000,
+                0x100000000,
                 0x80000000,
                 0x40000000,
                 0x20000000,
