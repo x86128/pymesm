@@ -9,6 +9,7 @@ MASK40 = 0x0FFFFFFFFFF
 MASK41 = 0x1FFFFFFFFFF
 MASK42 = 0x3FFFFFFFFFF
 MASK48 = 0xFFFFFFFFFFFF
+MASK82 = 0x3FFFFFFFFFFFFFFFFFFFF
 
 BIT20 = 1 << 19
 BIT19 = 1 << 18
@@ -28,7 +29,7 @@ op_names = ['atx', 'stx', 'mod', 'xts', 'add', 'sub', 'rsub', 'amx',
             'uj', 'vjm', 'ij', 'stop', 'vzm', 'vim', 'e36', 'vlm']
 op_codes = {op: i for i, op in enumerate(op_names)}
 
-op_unimplemented = ['mod', 'amx', 'apx', 'aux', 'acx', 'anx', 'eaddx',
+op_unimplemented = ['mod', 'apx', 'aux', 'acx', 'anx', 'eaddx',
                     'esubx', 'eaddn', 'xtr', 'rte', 'e32', 'e33',
                     'e46', 'e47', 'e36', 'e20', 'e21', 'esub', 'esubx',
                     'e50', 'e51', 'e52', 'e53', 'e54', 'e55', 'e56', 'e57',
@@ -66,25 +67,6 @@ def frombesm(x):
     if m & BIT41:
         m = -float(- m & MASK41)
     return ldexp(m, e - 64 - 40)
-
-
-def norm(self, exp, mnt, rmr, rnd_rq):
-    rounded = False
-    if self.norm_ena:
-        while (mnt & BIT41 == 0) == (mnt & BIT40 == 0):
-            mnt = (mnt << 1) & MASK42
-            if rmr & 0x8000000000:
-                mnt |= 1
-                rounded = True
-            rmr = (rmr << 1) & MASK40
-            exp -= 1
-            if exp < 0:
-                break
-    if exp < 0:
-        return 0, 0
-    if self.round_ena and not rounded:
-        mnt |= 1
-    return exp, mnt
 
 
 class CPU:
@@ -300,12 +282,6 @@ class CPU:
         self.acc_wr(self.acc / (self.dbus.read(self.uaddr)))
         self.set_mul()
 
-    def op_mul(self):
-        if self.stack:
-            self.sp -= 1
-        self.acc_wr(self.acc * self.dbus.read(self.uaddr))
-        self.set_mul()
-
     def op_asx(self):
         if self.stack:
             self.sp -= 1
@@ -460,12 +436,65 @@ class CPU:
                 break
         return e, m
 
+    def op_mul(self):
+        if self.stack:
+            self.sp -= 1
+        x = self.dbus.read(self.uaddr)
+        if (self.acc & BIT41) != (x & BIT41):
+            neg = True
+        else:
+            neg = False
+        a_exp, a_mnt = (self.acc >> 41) & MASK7, self.acc & MASK41
+        b_exp, b_mnt = (x >> 41) & MASK7, x & MASK41
+
+        a_exp = a_exp + b_exp - 64
+        p_mnt = a_mnt * b_mnt
+        rmr = p_mnt & MASK40
+
+        if neg:
+            p_mnt = ((p_mnt ^ MASK82) + 1) & MASK82
+
+        # norm & round
+        a_mnt = (p_mnt >> 40) & MASK42
+        rnd_rq = 0
+        if self.norm_ena:
+            if (a_mnt & BIT42 == 0) != (a_mnt & BIT41 == 0):
+                a_exp += 1
+                if a_mnt & 1:
+                    rmr = (rmr >> 1) | (1 << 39)
+                    rnd_rq |= 1
+                a_mnt >>= 1
+            else:
+                while (a_mnt & BIT40 == 0) == (a_mnt & BIT41 == 0):
+                    a_mnt = (a_mnt << 1) & MASK41
+                    if rmr & BIT40:
+                        rnd_rq = 0
+                        a_mnt |= 1
+                    rmr = (rmr << 1) & MASK40
+                    a_exp -= 1
+                    if a_exp < 0:
+                        a_exp, a_mnt = 0, 0
+                        rmr = 0
+                        break
+
+        if self.round_ena and rnd_rq != 0:
+            a_mnt |= 1
+
+        if a_exp > 127:
+            print("WARN: MUL: Exponent overflow")
+            a_exp &= 0x7F
+
+        self.rmr_wr(rmr)
+        self.acc_wr((a_exp << 41) | (a_mnt & MASK41))
+        self.set_mul()
+
     def op_add(self):
         if self.stack:
             self.sp -= 1
         x = self.dbus.read(self.uaddr)
         e, m = (x >> 41) & MASK7, x & MASK41
-        self.add(self.acc, e, m)
+        a_exp, a_mnt = (self.acc >> 41) & MASK7, self.acc & MASK41
+        self.add(a_exp, a_mnt, e, m)
         self.set_add()
 
     def op_sub(self):
@@ -473,18 +502,38 @@ class CPU:
             self.sp -= 1
         x = self.dbus.read(self.uaddr)
         e, m = self.negate(x)
-        self.add(self.acc, e, m)
+        a_exp, a_mnt = (self.acc >> 41) & MASK7, self.acc & MASK41
+        self.add(a_exp, a_mnt, e, m)
         self.set_add()
 
     def op_rsub(self):
         if self.stack:
             self.sp -= 1
         e, m = self.negate(self.acc)
-        self.add(self.dbus.read(self.uaddr), e, m)
+        x = self.dbus.read(self.uaddr)
+        b_exp, b_mnt = (x >> 41) & MASK7, x & MASK41
+        self.add(b_exp, b_mnt, e, m)
         self.set_add()
 
-    def add(self, a, b_exp, b_mnt):
-        a_exp, a_mnt = (a >> 41) & MASK7, a & MASK41
+    def op_amx(self):
+        if self.stack:
+            self.sp -= 1
+        x = self.dbus.read(self.uaddr)
+        if self.acc & BIT41 != 0:
+            a_exp, a_mnt = self.negate(self.acc)
+        else:
+            a_exp, a_mnt = (self.acc >> 41) & MASK7, self.acc & MASK41
+        if x & BIT41 != 0:
+            b_exp, b_mnt = (x >> 41) & MASK7, x & MASK41
+        else:
+            b_exp, b_mnt = self.negate(x)
+            # TODO: в некоторых случаях negate может вытолкнуть
+            # младший бит
+            # self.rmr = 0  # надо уточнить
+        self.add(a_exp, a_mnt, b_exp, b_mnt)
+        self.set_add()
+
+    def add(self, a_exp, a_mnt, b_exp, b_mnt):
         # b_exp, b_mnt = (b >> 41) & MASK7, b & MASK41
         if a_exp < b_exp:
             a_exp, b_exp = b_exp, a_exp
@@ -493,7 +542,7 @@ class CPU:
         a_sgn = (a_mnt & BIT41) != 0
         b_sgn = (b_mnt & BIT41) != 0
 
-        rmr = self.rmr & MASK40
+        self.rmr = rmr = 0
         rnd_rq = 0
         while a_exp > b_exp:
             b_exp += 1

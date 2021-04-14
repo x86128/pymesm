@@ -5,10 +5,10 @@ TESTS=00_aax_aox_aex.asm  02_ati_ita.asm  04_utc_wtc.asm  \
 RUN=$(TESTS:.asm=.oct)
 
 %.oct :
-	cd tests && python3 ../pymesm.py -i $@ -c 12000
+	cd test && python3 ../pymesm.py -i $@ -c 12000
 
 %.asm :
-	cd tests && python3 ../asm/asm.py -i $@
+	cd test && python3 ../asm/asm.py -i $@
 
 all: build_tests run_tests
 
