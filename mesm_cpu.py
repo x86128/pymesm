@@ -9,14 +9,18 @@ MASK39 = 0x07FFFFFFFFF
 MASK40 = 0x0FFFFFFFFFF
 MASK41 = 0x1FFFFFFFFFF
 MASK42 = 0x3FFFFFFFFFF
+MASK44 = 0xFFFFFFFFFFF
 MASK48 = 0xFFFFFFFFFFFF
 MASK82 = 0x3FFFFFFFFFFFFFFFFFFFF
+MASK84 = 0xFFFFFFFFFFFFFFFFFFFFF
 
 BIT20 = 1 << 19
 BIT19 = 1 << 18
 BIT40 = 1 << 39
 BIT41 = 1 << 40
 BIT42 = 1 << 41
+BIT43 = 1 << 42
+BIT44 = 1 << 43
 BIT48 = 1 << 47
 
 op_names = ['atx', 'stx', 'mod', 'xts', 'add', 'sub', 'rsub', 'amx',
@@ -485,30 +489,42 @@ class CPU:
         if self.stack:
             self.sp -= 1
         x = self.dbus.read(self.uaddr)
-        if (self.acc & BIT41) != (x & BIT41):
-            neg = True
-        else:
-            neg = False
+
         a_exp, a_mnt = (self.acc >> 41) & MASK7, self.acc & MASK41
         b_exp, b_mnt = (x >> 41) & MASK7, x & MASK41
 
+        neg1 = self.acc & BIT41 != 0
+        if neg1:
+            a_mnt |= BIT42
+            a_mnt = ((a_mnt ^ MASK42) + 1) & MASK42
+
+        neg2 = x & BIT41 != 0
+        if neg2:
+            b_mnt |= BIT42
+            b_mnt = ((b_mnt ^ MASK42) + 1) & MASK42
+
         a_exp = a_exp + b_exp - 64
         p_mnt = a_mnt * b_mnt
-        print(f"====== {p_mnt:>032o}")
 
-        # if neg:
-        #    p_mnt = ((p_mnt ^ MASK82) + 1) & MASK82
+        if neg1 ^ neg2:
+            p_mnt = ((p_mnt ^ MASK84) + 1) & MASK84
 
         rmr = p_mnt & MASK40
         # norm & round
-        a_mnt = (p_mnt >> 40) & MASK42
+        a_mnt = (p_mnt >> 40) & MASK44
         rnd_rq = 1
         sticky = 0
         if self.norm_ena:
-            if (a_mnt & BIT42 == 0) != (a_mnt & BIT41 == 0):
+            if (a_mnt & BIT44 == 0) != (a_mnt & BIT43 == 0):
+                a_exp += 2
+                if a_mnt & 3:
+                    rmr = (rmr >> 2) | ((a_mnt & 3) << 39)
+                    sticky = 1
+                a_mnt >>= 2
+            elif (a_mnt & BIT42 == 0) != (a_mnt & BIT41 == 0):
                 a_exp += 1
                 if a_mnt & 1:
-                    rmr = (rmr >> 1) | (1 << 39)
+                    rmr = (rmr >> 1) | ((a_mnt & 1) << 39)
                     sticky = 1
                 a_mnt >>= 1
             else:
@@ -589,9 +605,6 @@ class CPU:
             b_exp, b_mnt = (x >> 41) & MASK7, x & MASK41
         else:
             b_exp, b_mnt = self.negate(x)
-            # TODO: в некоторых случаях negate может вытолкнуть
-            # младший бит
-            # self.rmr = 0  # надо уточнить
         self.add(a_exp, a_mnt, b_exp, b_mnt)
         self.set_add()
 

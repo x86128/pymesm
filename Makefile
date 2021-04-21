@@ -1,8 +1,8 @@
-TESTS=00_aax_aox_aex.asm  02_ati_ita.asm  04_utc_wtc.asm  \
-	  06_vlm.asm  08_sti.asm 01_addr0.asm 03_uza_uia.asm  \
-	  05_vjm.asm      07_its.asm  09_asn_asx.asm 10_add_sub_rsub.asm
+TESTS=00_aax_aox_aex.asm 01_addr0.asm 02_ati_ita.asm 03_uza_uia.asm \
+      04_utc_wtc.asm 05_vjm.asm 06_vlm.asm 07_its.asm 08_sti.asm \
+	  09_asn_asx.asm 10_add_sub_rsub.asm 11_amx.asm 12_div.asm 13_mul.asm
 
-RUN=$(TESTS:.asm=.oct)
+OCTS=$(TESTS:.asm=.oct)
 
 %.oct :
 	cd test && python3 ../pymesm.py -i $@ -c 12000
@@ -10,12 +10,12 @@ RUN=$(TESTS:.asm=.oct)
 %.asm :
 	cd test && python3 ../asm/asm.py -i $@
 
-all: build_tests run_tests
+all: build run
 
-build_tests: $(TESTS)
+build: $(TESTS)
 
-run_tests: $(RUN)
+run: $(OCTS)
 
 clean:
-	rm tests/*.oct
+	rm test/*.oct
 
