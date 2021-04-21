@@ -5,6 +5,7 @@ MASK7 = 0x7F
 MASK12 = 0xFFF
 MASK15 = 0x7FFF
 MASK24 = 0xFFFFFF
+MASK39 = 0x07FFFFFFFFF
 MASK40 = 0x0FFFFFFFFFF
 MASK41 = 0x1FFFFFFFFFF
 MASK42 = 0x3FFFFFFFFFF
@@ -16,6 +17,7 @@ BIT19 = 1 << 18
 BIT40 = 1 << 39
 BIT41 = 1 << 40
 BIT42 = 1 << 41
+BIT48 = 1 << 47
 
 op_names = ['atx', 'stx', 'mod', 'xts', 'add', 'sub', 'rsub', 'amx',
             'xta', 'aax', 'aex', 'arx', 'avx', 'aox', 'div', 'mul',
@@ -30,7 +32,7 @@ op_names = ['atx', 'stx', 'mod', 'xts', 'add', 'sub', 'rsub', 'amx',
 op_codes = {op: i for i, op in enumerate(op_names)}
 
 op_unimplemented = ['mod', 'apx', 'aux', 'acx', 'anx', 'eaddx',
-                    'esubx', 'eaddn', 'xtr', 'rte', 'e32', 'e33',
+                    'esubx', 'xtr', 'rte', 'e32', 'e33',
                     'e46', 'e47', 'e36', 'e20', 'e21', 'esub', 'esubx',
                     'e50', 'e51', 'e52', 'e53', 'e54', 'e55', 'e56', 'e57',
                     'e60', 'e61', 'e62', 'e63', 'e64', 'e65', 'e66', 'e67',
@@ -154,10 +156,10 @@ class CPU:
             return self.acc != 0
         elif self.f_add:
             return self.acc & BIT41 != 0
-        elif self.f_mul and self.acc < 0x80000000:
-            return True
+        elif self.f_mul:
+            return self.acc & BIT48 == 0
         else:
-            return False
+            return True
 
     def set_trace(self):
         self.trace = True
@@ -275,12 +277,6 @@ class CPU:
             self.sp -= 1
         self.acc_wr(-self.acc)
         self.set_add()
-
-    def op_div(self):
-        if self.stack:
-            self.sp -= 1
-        self.acc_wr(self.acc / (self.dbus.read(self.uaddr)))
-        self.set_mul()
 
     def op_asx(self):
         if self.stack:
@@ -405,12 +401,13 @@ class CPU:
         if self.omega:
             self.pc_next = self.uaddr
             self.is_left = True
-        # self.rmr = self.acc
+        self.rmr_wr(self.acc)
 
     def op_uza(self):
         if not self.omega:
             self.pc_next = self.uaddr
             self.is_left = True
+        self.rmr_wr(self.acc)
 
     def op_ntr(self):
         self.rr_reg = self.uaddr & 0x3F
@@ -436,6 +433,54 @@ class CPU:
                 break
         return e, m
 
+    def op_div(self):
+        if self.stack:
+            self.sp -= 1
+        x = self.dbus.read(self.uaddr)
+
+        self.rmr = 0
+        rmr = 1 << 40
+
+        acc = 0
+        a_exp, a_mnt = (self.acc >> 41) & MASK7, self.acc & MASK41
+        b_exp, b_mnt = (x >> 41) & MASK7, x & MASK41
+        a_exp = a_exp - b_exp + 64
+        if a_mnt & BIT41 == b_mnt & BIT41:
+            rail = (a_mnt - b_mnt) & MASK41
+        else:
+            rail = (a_mnt + b_mnt) & MASK41
+        while True:
+            if rmr & BIT41:
+                if rail & BIT41 == a_mnt & BIT41:
+                    a_exp += 1
+                    rail = a_mnt
+                else:
+                    rail = a_mnt << 1
+            elif rail == 0:
+                break
+            else:
+                if (rail >> 39) == 0 or ((rail >> 39) == 7 and rail & MASK39 != 0):
+                    rail <<= 1
+                elif (rail & BIT42 == 0) ^ (b_mnt & BIT41 == 0):
+                    acc = (acc - rmr) & MASK41
+                    rail = (rail + b_mnt) & MASK42
+                else:
+                    acc = (acc + rmr) & MASK41
+                    rail = (rail - b_mnt) & MASK42
+                if rmr & 1:
+                    break
+            rmr >>= 1
+        a_mnt = acc
+        if self.norm_ena:
+            while (a_mnt & BIT40 == 0) == (a_mnt & BIT41 == 0):
+                a_mnt = (a_mnt << 1) & MASK41
+                a_exp -= 1
+                if a_exp < 0:
+                    a_exp, a_mnt = 0, 0
+                    break
+        self.acc_wr((a_exp << 41) | (a_mnt & MASK41))
+        self.set_mul()
+
     def op_mul(self):
         if self.stack:
             self.sp -= 1
@@ -449,20 +494,22 @@ class CPU:
 
         a_exp = a_exp + b_exp - 64
         p_mnt = a_mnt * b_mnt
+        print(f"====== {p_mnt:>032o}")
+
+        # if neg:
+        #    p_mnt = ((p_mnt ^ MASK82) + 1) & MASK82
+
         rmr = p_mnt & MASK40
-
-        if neg:
-            p_mnt = ((p_mnt ^ MASK82) + 1) & MASK82
-
         # norm & round
         a_mnt = (p_mnt >> 40) & MASK42
-        rnd_rq = 0
+        rnd_rq = 1
+        sticky = 0
         if self.norm_ena:
             if (a_mnt & BIT42 == 0) != (a_mnt & BIT41 == 0):
                 a_exp += 1
                 if a_mnt & 1:
                     rmr = (rmr >> 1) | (1 << 39)
-                    rnd_rq |= 1
+                    sticky = 1
                 a_mnt >>= 1
             else:
                 while (a_mnt & BIT40 == 0) == (a_mnt & BIT41 == 0):
@@ -477,14 +524,29 @@ class CPU:
                         rmr = 0
                         break
 
-        if self.round_ena and rnd_rq != 0:
-            a_mnt |= 1
+        if self.round_ena:
+            if (rmr != 0 or sticky) and rnd_rq != 0:
+                a_mnt |= 1
 
         if a_exp > 127:
             print("WARN: MUL: Exponent overflow")
             a_exp &= 0x7F
 
         self.rmr_wr(rmr)
+        self.acc_wr((a_exp << 41) | (a_mnt & MASK41))
+        self.set_mul()
+
+    def op_eaddn(self):
+        a_exp, a_mnt = (self.acc >> 41) & MASK7, self.acc & MASK41
+        a_exp = (a_exp + self.uaddr - 64) & MASK7
+        self.rmr = 0
+        if self.norm_ena:
+            while (a_mnt & BIT40 == 0) == (a_mnt & BIT41 == 0):
+                a_mnt = (a_mnt << 1) & MASK41
+                a_exp -= 1
+                if a_exp < 0:
+                    a_exp, a_mnt = 0, 0
+                    break
         self.acc_wr((a_exp << 41) | (a_mnt & MASK41))
         self.set_mul()
 
@@ -595,19 +657,26 @@ class CPU:
         if self.f_log:
             self.acc_wr(self.rmr)
         else:
-            e = ((self.acc >> 41) & 0x7F + self.uaddr & 0x7F - 64) & 0x7F
-            m = self.rmr & MASK40
-            while self.norm_ena and (m & BIT41 == 0) == (m & BIT40 == 0):
-                m = (m << 1) & MASK41
-                e -= 1
-                if e < 0:
-                    break
-            if e < 0:  # underflow
-                e, m = 0, 0
-            # упаковываем число
-            e &= 0o177
-            m &= MASK41
-            self.acc_wr((e << 41) | m)
+            a_exp = ((self.acc >> 41) + self.uaddr - 64) & 0x7F
+            a_mnt = self.rmr & MASK40
+
+            if self.norm_ena:
+                if (a_mnt & BIT42 == 0) != (a_mnt & BIT41 == 0):
+                    a_exp += 1
+                    self.rmr = self.rmr >> 1 | ((a_mnt & 1) << 39)
+                    a_mnt >>= 1
+                    if a_exp > 0o177:
+                        print("WARN: Exponent overflow")
+                        self.failure = True
+                        a_exp = 0o177
+                else:
+                    while (a_mnt & BIT40 == 0) == (a_mnt & BIT41 == 0):
+                        a_mnt = (a_mnt << 1) & MASK41
+                        a_exp -= 1
+                        if a_exp < 0:
+                            a_exp, a_mnt = 0, 0
+                            break
+            self.acc_wr((a_exp << 41) | a_mnt)
 
     def op_unimpl(self):
         self.running = False

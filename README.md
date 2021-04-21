@@ -1,20 +1,22 @@
-# Integer-only MESM6-like machine
+# Python implementation of MESM6
 
-Split data and program memory, each consist of 65536 words.
+Split data and program memory, each consist of 32768 48-bit wide words.
 
-32 bit instruction words packed as pairs to 64bit words. So, maximum program size is 131072 instructions. 
+15 bit program counter and index registers (address modifiers).
 
-Data memory is 65536 64-bit words, but ACC is 32-bit only.
+Total of 64+16 instructions with MESM6 encoding.
 
-16 bit program counter and index registers (address modifiers).
+Short address instruction format:
 
-Same instruction op_codes numbers as MESM6 (total of 64+16).
+| 4 bit | 1 bit | 1 bit | 6 bit | 12 bit |
+|---|---|---|---|---|
+| index | 0 | ext | op_code | address |
 
-For simplicity, CPU instruction encoded as:
+Long address format:
 
-| 8 bit | 8 bit | 16 bit |
-|---|---|---|
-| index | op_code | address |
+| 4 bit | 1 bit | 4 bit | 15 bit |
+|---|---|---|---|
+| index | 1 | op_code | address |
 
 Instructions implemented by translating original MESM6 microcode.
 
