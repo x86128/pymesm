@@ -214,6 +214,12 @@ if __name__ == '__main__':
                 else:
                     irom[PC] = pack_insn(op_indx, op_codes[op], op_addr & MASK15)
                 PC += 1
+                # if unconditional branch instruction at left halfword
+                # then fill right halfword with UTC 0
+                if op in ['uj', 'vjm', 'ij']:
+                    if PC & 1 == 1:
+                        irom[PC] = pack_insn(0, op_codes['utc'], 0)  # UTC 0
+                        PC += 1
             else:
                 print(f"line: {line}: Unknown assembler command: {kwrd}")
                 error_count += 1

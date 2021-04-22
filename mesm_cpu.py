@@ -1,6 +1,7 @@
 import array
 from math import ldexp, frexp
 
+MASK6 = 0x3F
 MASK7 = 0x7F
 MASK12 = 0xFFF
 MASK15 = 0x7FFF
@@ -14,6 +15,8 @@ MASK48 = 0xFFFFFFFFFFFF
 MASK82 = 0x3FFFFFFFFFFFFFFFFFFFF
 MASK84 = 0xFFFFFFFFFFFFFFFFFFFFF
 
+BIT4 = 1 << 3
+BIT5 = 1 << 4
 BIT20 = 1 << 19
 BIT19 = 1 << 18
 BIT40 = 1 << 39
@@ -36,7 +39,7 @@ op_names = ['atx', 'stx', 'mod', 'xts', 'add', 'sub', 'rsub', 'amx',
 op_codes = {op: i for i, op in enumerate(op_names)}
 
 op_unimplemented = ['mod', 'apx', 'aux',
-                    'xtr', 'rte', 'e32', 'e33',
+                    'e32', 'e33',
                     'e46', 'e47', 'e36', 'e20', 'e21',
                     'e50', 'e51', 'e52', 'e53', 'e54', 'e55', 'e56', 'e57',
                     'e60', 'e61', 'e62', 'e63', 'e64', 'e65', 'e66', 'e67',
@@ -138,15 +141,15 @@ class CPU:
 
     @property
     def f_log(self):
-        return self.rr_reg & 0b11100 == 0b100
+        return self.rr_reg & 0b11100 == 0b00100
 
     @property
     def f_mul(self):
-        return self.rr_reg & 0b11100 == 0b1000
+        return self.rr_reg & 0b11000 == 0b01000
 
     @property
     def f_add(self):
-        return self.rr_reg & 0b11100 == 0b10000
+        return self.rr_reg & 0b10000 == 0b10000
 
     @property
     def omega(self):
@@ -158,10 +161,10 @@ class CPU:
         """
         if self.f_log:
             return self.acc != 0
-        elif self.f_add:
-            return self.acc & BIT41 != 0
         elif self.f_mul:
             return self.acc & BIT48 == 0
+        elif self.f_add:
+            return self.acc & BIT41 != 0
         else:
             return True
 
@@ -238,6 +241,21 @@ class CPU:
         self.rmr = rmr & MASK48
         if self.trace:
             print(f"  RMR = {self.rmr:>016o}")
+
+    def rr_wr(self, rr):
+        self.rr_reg = rr & MASK7
+        if self.trace:
+            print(f"  RR = {self.rr_reg:>02o}")
+
+    def op_rte(self):
+        self.acc_wr((self.rr_reg & self.uaddr & MASK6) << 41)
+        self.set_log()
+
+    def op_xtr(self):
+        if self.stack:
+            self.sp -= 1
+        x = (self.dbus.read(self.uaddr) >> 41) & MASK6
+        self.rr_wr(x)
 
     def op_atx(self):
         self.dbus.write(self.uaddr, self.acc)
@@ -351,7 +369,7 @@ class CPU:
         else:
             bit = 1
             acc = self.acc
-            while not(acc & BIT48):
+            while not (acc & BIT48):
                 bit += 1
                 acc = (acc << 1) & MASK48
             self.rmr = (self.acc << bit) & MASK48
@@ -367,6 +385,7 @@ class CPU:
         if self.stack:
             self.sp -= 1
         x = self.dbus.read(self.uaddr)
+        self.rmr_wr(self.acc)
         self.acc_wr(self.acc ^ x)
         self.set_log()
 
@@ -449,9 +468,7 @@ class CPU:
         self.rmr_wr(self.acc)
 
     def op_ntr(self):
-        self.rr_reg = self.uaddr & 0x3F
-        if self.trace:
-            print(f"  RR = {self.rr_reg:>06b}")
+        self.rr_wr(self.uaddr)
 
     def negate(self, x):
         e, m = (x >> 41) & MASK7, x & MASK41
