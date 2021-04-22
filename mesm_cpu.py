@@ -35,7 +35,7 @@ op_names = ['atx', 'stx', 'mod', 'xts', 'add', 'sub', 'rsub', 'amx',
             'uj', 'vjm', 'ij', 'stop', 'vzm', 'vim', 'e36', 'vlm']
 op_codes = {op: i for i, op in enumerate(op_names)}
 
-op_unimplemented = ['mod', 'apx', 'aux', 'acx', 'anx',
+op_unimplemented = ['mod', 'apx', 'aux',
                     'xtr', 'rte', 'e32', 'e33',
                     'e46', 'e47', 'e36', 'e20', 'e21',
                     'e50', 'e51', 'e52', 'e53', 'e54', 'e55', 'e56', 'e57',
@@ -78,7 +78,7 @@ def frombesm(x):
 class CPU:
     def __init__(self, ibus, dbus):
         self.pc = 1
-        self.commands = 100
+        self.instr_counter = 100
         self.ibus = ibus
         self.dbus = dbus
 
@@ -165,10 +165,10 @@ class CPU:
         else:
             return True
 
-    def set_trace(self):
+    def set_trace(self, trace_ibus=False, trace_dbus=True):
         self.trace = True
-        self.dbus.trace = True
-        self.ibus.trace = True
+        self.dbus.trace = trace_dbus
+        self.ibus.trace = trace_ibus
 
     def set_log(self):
         self.rr_reg = self.rr_reg & 0b11100011 | 0b100
@@ -235,7 +235,7 @@ class CPU:
             print(f"  ACC = {self.acc:>016o} ({frombesm(self.acc)})")
 
     def rmr_wr(self, rmr):
-        self.rmr = rmr
+        self.rmr = rmr & MASK48
         if self.trace:
             print(f"  RMR = {self.rmr:>016o}")
 
@@ -279,7 +279,9 @@ class CPU:
     def op_avx(self):
         if self.stack:
             self.sp -= 1
-        self.acc_wr(-self.acc)
+        a_exp, a_mnt = self.negate(self.acc)
+        self.acc_wr((a_exp << 41) | (a_mnt & MASK41))
+        self.rmr_wr(0)
         self.set_add()
 
     def op_asx(self):
@@ -327,6 +329,39 @@ class CPU:
             t += 1
         self.acc_wr(t)
         self.set_mul()
+
+    def op_acx(self):
+        if self.stack:
+            self.sp -= 1
+        x = self.dbus.read(self.uaddr)
+        self.rmr = 0
+        self.acc = bin(self.acc).count("1") + x
+        if self.acc > MASK48:
+            self.acc = self.acc + 1
+        self.acc_wr(self.acc)
+        self.set_log()
+
+    def op_anx(self):
+        if self.stack:
+            self.sp -= 1
+        x = self.dbus.read(self.uaddr)
+        if self.acc == 0:
+            self.acc = 0
+            self.rmr = 0
+        else:
+            bit = 1
+            acc = self.acc
+            while not(acc & BIT48):
+                bit += 1
+                acc = (acc << 1) & MASK48
+            self.rmr = (self.acc << bit) & MASK48
+            self.acc = bit
+        self.acc += x
+        if self.acc > MASK48:
+            self.acc_wr(self.acc + 1)
+        else:
+            self.acc_wr(self.acc)
+        self.set_log()
 
     def op_aex(self):
         if self.stack:
@@ -552,17 +587,21 @@ class CPU:
         self.acc_wr((a_exp << 41) | (a_mnt & MASK41))
         self.set_mul()
 
+    def norm_left(self, a_exp, a_mnt):
+        while (a_mnt & BIT40 == 0) == (a_mnt & BIT41 == 0):
+            a_mnt = (a_mnt << 1) & MASK41
+            a_exp -= 1
+            if a_exp < 0:
+                a_exp, a_mnt = 0, 0
+                break
+        return a_exp, a_mnt
+
     def op_eaddn(self):
         a_exp, a_mnt = (self.acc >> 41) & MASK7, self.acc & MASK41
         a_exp = (a_exp + self.uaddr - 64) & MASK7
         self.rmr = 0
         if self.norm_ena:
-            while (a_mnt & BIT40 == 0) == (a_mnt & BIT41 == 0):
-                a_mnt = (a_mnt << 1) & MASK41
-                a_exp -= 1
-                if a_exp < 0:
-                    a_exp, a_mnt = 0, 0
-                    break
+            a_exp, a_mnt = self.norm_left(a_exp, a_mnt)
         self.acc_wr((a_exp << 41) | (a_mnt & MASK41))
         self.set_mul()
 
@@ -573,12 +612,7 @@ class CPU:
         if a_exp < 0:
             a_mnt = a_exp = 0
         elif self.norm_ena:
-            while (a_mnt & BIT40 == 0) == (a_mnt & BIT41 == 0):
-                a_mnt = (a_mnt << 1) & MASK41
-                a_exp -= 1
-                if a_exp < 0:
-                    a_exp, a_mnt = 0, 0
-                    break
+            a_exp, a_mnt = self.norm_left(a_exp, a_mnt)
         self.acc_wr(((a_exp & MASK7) << 41) | (a_mnt & MASK41))
         self.set_mul()
 
@@ -588,12 +622,7 @@ class CPU:
         a_exp = (a_exp + x_exp - 64) & MASK7
         self.rmr = 0
         if self.norm_ena:
-            while (a_mnt & BIT40 == 0) == (a_mnt & BIT41 == 0):
-                a_mnt = (a_mnt << 1) & MASK41
-                a_exp -= 1
-                if a_exp < 0:
-                    a_exp, a_mnt = 0, 0
-                    break
+            a_exp, a_mnt = self.norm_left(a_exp, a_mnt)
         self.acc_wr((a_exp << 41) | (a_mnt & MASK41))
         self.set_mul()
 
@@ -605,12 +634,7 @@ class CPU:
         if a_exp < 0:
             a_exp = a_mnt = 0
         elif self.norm_ena:
-            while (a_mnt & BIT40 == 0) == (a_mnt & BIT41 == 0):
-                a_mnt = (a_mnt << 1) & MASK41
-                a_exp -= 1
-                if a_exp < 0:
-                    a_exp, a_mnt = 0, 0
-                    break
+            a_exp, a_mnt = self.norm_left(a_exp, a_mnt)
         self.acc_wr(((a_exp & MASK7) << 41) | (a_mnt & MASK41))
         self.set_mul()
 
@@ -752,8 +776,6 @@ class CPU:
                 f"{self.pc:>05o}: {op_names[self.op_code]} {self.op_addr:>05o},M{self.op_indx}")
 
     def step(self):
-        if self.commands <= 0:
-            self.running = False
         # FETCH
         if self.is_left:
             self.fetch()
@@ -773,8 +795,11 @@ class CPU:
         self._opcodes[self.op_code]()
 
         self.pc = self.pc_next
-        self.commands -= 1
+
+        self.instr_counter -= 1
+        if self.instr_counter <= 0:
+            self.running = False
 
     def run(self, num=100):
-        self.commands = num
+        self.instr_counter = num
         self.running = True
