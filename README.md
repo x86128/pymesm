@@ -26,8 +26,9 @@ Most of the tests adopted from original MESM6 https://github.com/besm6/mesm6
 
 * Load/store, register/register
   * ATX, XTA, ATI, ITA, XTS, STX, STI, ITS
-* Arithmetic (as unsigned 32bit integers) 
-  * A+X, A-X, X-A, AVX, A/X, A*X, ARX, AMX, E+N
+* Arithmetic operations
+  * A+X, A-X, X-A, AVX, A/X, A*X, ARX, AMX
+  * E+N, E-N, E+X, E-X
 * Shift
   * ASX, ASN
 * Logic
@@ -42,8 +43,7 @@ Most of the tests adopted from original MESM6 https://github.com/besm6/mesm6
   * STOP
     
 Unimplemented instructions:
-* MOD, APX, AUX, ACX, ANX, E+X, E-X, XTR, RTE, 
-* YTA, EXT, E-N, NTR
+* MOD, APX, AUX, ACX, ANX, XTR, RTE, EXT
 * extracodes
 
 ## Running

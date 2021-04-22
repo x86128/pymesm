@@ -34,7 +34,7 @@ keywords = ['ptr', 'org', 'dorg', 'arr', 'mem', 'lbl']
 op_names = ['atx', 'stx', 'mod', 'xts', 'add', 'sub', 'rsub', 'amx',
             'xta', 'aax', 'aex', 'arx', 'avx', 'aox', 'div', 'mul',
             'apx', 'aux', 'acx', 'anx', 'eaddx', 'esubx', 'asx', 'xtr',
-            'rte', 'yta', 'e32', 'e33', 'eaddn', 'esub', 'asn', 'ntr',
+            'rte', 'yta', 'e32', 'e33', 'eaddn', 'esubn', 'asn', 'ntr',
             'ati', 'sti', 'ita', 'its', 'mtj', 'jaddm', 'e46', 'e47',
             'e50', 'e51', 'e52', 'e53', 'e54', 'e55', 'e56', 'e57',
             'e60', 'e61', 'e62', 'e63', 'e64', 'e65', 'e66', 'e67',

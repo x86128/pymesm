@@ -26,7 +26,7 @@ BIT48 = 1 << 47
 op_names = ['atx', 'stx', 'mod', 'xts', 'add', 'sub', 'rsub', 'amx',
             'xta', 'aax', 'aex', 'arx', 'avx', 'aox', 'div', 'mul',
             'apx', 'aux', 'acx', 'anx', 'eaddx', 'esubx', 'asx', 'xtr',
-            'rte', 'yta', 'e32', 'e33', 'eaddn', 'esub', 'asn', 'ntr',
+            'rte', 'yta', 'e32', 'e33', 'eaddn', 'esubn', 'asn', 'ntr',
             'ati', 'sti', 'ita', 'its', 'mtj', 'jaddm', 'e46', 'e47',
             'e50', 'e51', 'e52', 'e53', 'e54', 'e55', 'e56', 'e57',
             'e60', 'e61', 'e62', 'e63', 'e64', 'e65', 'e66', 'e67',
@@ -35,9 +35,9 @@ op_names = ['atx', 'stx', 'mod', 'xts', 'add', 'sub', 'rsub', 'amx',
             'uj', 'vjm', 'ij', 'stop', 'vzm', 'vim', 'e36', 'vlm']
 op_codes = {op: i for i, op in enumerate(op_names)}
 
-op_unimplemented = ['mod', 'apx', 'aux', 'acx', 'anx', 'eaddx',
-                    'esubx', 'xtr', 'rte', 'e32', 'e33',
-                    'e46', 'e47', 'e36', 'e20', 'e21', 'esub', 'esubx',
+op_unimplemented = ['mod', 'apx', 'aux', 'acx', 'anx',
+                    'xtr', 'rte', 'e32', 'e33',
+                    'e46', 'e47', 'e36', 'e20', 'e21',
                     'e50', 'e51', 'e52', 'e53', 'e54', 'e55', 'e56', 'e57',
                     'e60', 'e61', 'e62', 'e63', 'e64', 'e65', 'e66', 'e67',
                     'e70', 'e71', 'e72', 'e73', 'e74', 'e75', 'e76', 'e77']
@@ -564,6 +564,54 @@ class CPU:
                     a_exp, a_mnt = 0, 0
                     break
         self.acc_wr((a_exp << 41) | (a_mnt & MASK41))
+        self.set_mul()
+
+    def op_esubn(self):
+        a_exp, a_mnt = (self.acc >> 41) & MASK7, self.acc & MASK41
+        a_exp = a_exp - (self.uaddr - 64)
+        self.rmr = 0
+        if a_exp < 0:
+            a_mnt = a_exp = 0
+        elif self.norm_ena:
+            while (a_mnt & BIT40 == 0) == (a_mnt & BIT41 == 0):
+                a_mnt = (a_mnt << 1) & MASK41
+                a_exp -= 1
+                if a_exp < 0:
+                    a_exp, a_mnt = 0, 0
+                    break
+        self.acc_wr(((a_exp & MASK7) << 41) | (a_mnt & MASK41))
+        self.set_mul()
+
+    def op_eaddx(self):
+        a_exp, a_mnt = (self.acc >> 41) & MASK7, self.acc & MASK41
+        x_exp = (self.dbus.read(self.uaddr) >> 41) & MASK7
+        a_exp = (a_exp + x_exp - 64) & MASK7
+        self.rmr = 0
+        if self.norm_ena:
+            while (a_mnt & BIT40 == 0) == (a_mnt & BIT41 == 0):
+                a_mnt = (a_mnt << 1) & MASK41
+                a_exp -= 1
+                if a_exp < 0:
+                    a_exp, a_mnt = 0, 0
+                    break
+        self.acc_wr((a_exp << 41) | (a_mnt & MASK41))
+        self.set_mul()
+
+    def op_esubx(self):
+        a_exp, a_mnt = (self.acc >> 41) & MASK7, self.acc & MASK41
+        x_exp = (self.dbus.read(self.uaddr) >> 41) & MASK7
+        a_exp = (a_exp - (x_exp - 64))
+        self.rmr = 0
+        if a_exp < 0:
+            a_exp = a_mnt = 0
+        elif self.norm_ena:
+            while (a_mnt & BIT40 == 0) == (a_mnt & BIT41 == 0):
+                a_mnt = (a_mnt << 1) & MASK41
+                a_exp -= 1
+                if a_exp < 0:
+                    a_exp, a_mnt = 0, 0
+                    break
+        self.acc_wr(((a_exp & MASK7) << 41) | (a_mnt & MASK41))
         self.set_mul()
 
     def op_add(self):
