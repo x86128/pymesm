@@ -243,7 +243,7 @@ class CPU:
             print(f"  RMR = {self.rmr:>016o}")
 
     def rr_wr(self, rr):
-        self.rr_reg = rr & MASK7
+        self.rr_reg = rr & MASK6
         if self.trace:
             print(f"  RR = {self.rr_reg:>02o}")
 
@@ -305,23 +305,29 @@ class CPU:
     def op_asx(self):
         if self.stack:
             self.sp -= 1
-        n = self.dbus.read(self.uaddr)
-        result = self.acc
+        n = self.dbus.read(self.uaddr) >> 41
+        self.rmr = 0
         if n >= 64:
-            result >>= (n - 64)
+            result = ((self.acc << 48) | self.rmr) >> (n - 64)
+            acc, rmr = result >> 48, result
         else:
-            result <<= (64 - n)
-        self.acc_wr(result)
+            result = self.acc << (64 - n)
+            rmr, acc = result >> 48, result & MASK48
+        self.rmr_wr(rmr)
+        self.acc_wr(acc)
         self.set_log()
 
     def op_asn(self):
         n = self.uaddr
-        result = self.acc
+        self.rmr = 0
         if n >= 64:
-            result >>= (n - 64)
+            result = ((self.acc << 48) | self.rmr) >> (n - 64)
+            acc, rmr = result >> 48, result
         else:
-            result <<= (64 - n)
-        self.acc_wr(result)
+            result = self.acc << (64 - n)
+            acc, rmr = result & MASK48, result >> 48
+        self.rmr_wr(rmr)
+        self.acc_wr(acc)
         self.set_log()
 
     def op_xta(self):
@@ -330,22 +336,13 @@ class CPU:
         self.acc_wr(self.dbus.read(self.uaddr))
         self.set_log()
 
-    def op_aax(self):
-        if self.stack:
-            self.sp -= 1
-        x = self.dbus.read(self.uaddr)
-        self.acc_wr(self.acc & x)
-        self.set_log()
-
     def op_arx(self):
         if self.stack:
             self.sp -= 1
-        ua = self.acc
-        ux = self.dbus.read(self.uaddr)
-        t = ua + ux
-        if t > MASK48:
-            t += 1
-        self.acc_wr(t)
+        summ = self.acc + self.dbus.read(self.uaddr)
+        if summ > MASK48:
+            summ += 1
+        self.acc_wr(summ)
         self.set_mul()
 
     def op_acx(self):
@@ -359,26 +356,38 @@ class CPU:
         self.acc_wr(self.acc)
         self.set_log()
 
+    def clz(self):
+        bit = 1
+        acc = self.acc
+        while not (acc & BIT48):
+            bit += 1
+            acc = (acc << 1) & MASK48
+        self.rmr = (self.acc << bit) & MASK48
+        return bit
+
     def op_anx(self):
         if self.stack:
             self.sp -= 1
         x = self.dbus.read(self.uaddr)
         if self.acc == 0:
-            self.acc = 0
-            self.rmr = 0
+            acc, rmr = 0, 0
         else:
-            bit = 1
-            acc = self.acc
-            while not (acc & BIT48):
-                bit += 1
-                acc = (acc << 1) & MASK48
-            self.rmr = (self.acc << bit) & MASK48
-            self.acc = bit
-        self.acc += x
-        if self.acc > MASK48:
-            self.acc_wr(self.acc + 1)
+            bits = self.clz()
+            acc, rmr = bits, self.acc << bits
+        acc += x
+        if acc > MASK48:
+            self.acc_wr(acc + 1)
         else:
-            self.acc_wr(self.acc)
+            self.acc_wr(acc)
+        self.rmr_wr(rmr)
+        self.set_log()
+
+    def op_aax(self):
+        if self.stack:
+            self.sp -= 1
+        x = self.dbus.read(self.uaddr)
+        self.acc_wr(self.acc & x)
+        self.rmr_wr(0)
         self.set_log()
 
     def op_aex(self):
@@ -394,6 +403,7 @@ class CPU:
             self.sp -= 1
         x = self.dbus.read(self.uaddr)
         self.acc_wr(self.acc | x)
+        self.rmr_wr(0)
         self.set_log()
 
     def op_utc(self):

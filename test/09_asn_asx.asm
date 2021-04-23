@@ -26,17 +26,34 @@ lbl     b
         asx     cful
         uia     fail
 #
-        xta     chess
-        asx     right1
-        aex     chess+1
+        xta     chess+1
+        asx     c0ful
+        aex     chess
         uia     fail
-#
+
+        xta     cful            # а что
+        asn     52              # попадет (64-12)
+        yta     0               # в рмр
+        aex     cfff            # при
+        uia     fail            # сдвигах ?
+
+        xta     cful
+        asn     68              # 64+4
+        yta     0
+        aex     cfu
+        uia     fail
+
+        xta     cful
+        asx     b0020000000000000    # сдвиг на -64
+        uia     fail
+
 lbl     pass
         stop    0o12345,6
 lbl     fail
         stop    0o76543,2
 #-------------------------
 dorg    0o2000                          # данные с адреса 2000
+arr     b0020000000000000   0o0020000000000000
 arr     cful     0xFFFFFFFFFFFF
 arr     chess   [0xAAAAAAAAAAAA,
                  0x555555555555]
@@ -90,4 +107,7 @@ arr     masks   [0,
                 0x00000004,
                 0x00000002]
 arr     i1      1
+arr     c0ful   0o3777777777777777
+arr     cfu     0o7400000000000000
+arr     cfff    0o7777
 arr     right1  0x41
