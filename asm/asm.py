@@ -66,6 +66,22 @@ def pack_insn(indx, op, addr):
     return halfword
 
 
+def print_instruction(w):
+    op_indx = (w >> 20) & 0xF
+    if w & (1 << 19) == 0:  # short address command
+        op_code = (w >> 12) & 0o77
+        op_addr = w & 0xFFF
+        if w & (1 << 18) != 0:  # address is extended
+            op_addr |= 0o70000
+    else:  # long address command
+        op_code = ((w >> 15) & 0o37) + 48
+        op_addr = w & 0o77777
+    if op_indx == 0:
+        return f"{op_names[op_code]} {op_addr:>05o}"
+    else:
+        return f"{op_names[op_code]} {op_addr:>05o},M{op_indx:o}"
+
+
 if __name__ == '__main__':
     source = open(input_file).read()
     t = Tokenizer(source)
@@ -267,7 +283,8 @@ if __name__ == '__main__':
                 opc = pc >> 1
                 out.write(f"i {opc:>05o} {irom[pc]:>08o} {irom[pc + 1]:>08o}\n")
                 if args.listing:
-                    print(f"i {opc:>05o} {irom[pc]:>08o} {irom[pc + 1]:>08o}")
+                    print(f"i {opc:>05o}:   {irom[pc]:>08o} {print_instruction(irom[pc])}")
+                    print(f"           {irom[pc + 1]:>08o} {print_instruction(irom[pc + 1])}")
         # do dram print out
         for dp in range(32768):
             if dram[dp] != 0xFFFFFFFFFFFFFFFF:

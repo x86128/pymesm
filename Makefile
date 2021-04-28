@@ -4,17 +4,21 @@ TESTS=00_aax_aox_aex.asm 01_addr0.asm 02_ati_ita.asm 03_uza_uia.asm \
 	  14_arx.asm 15_e+n_e-n_e+x_e-x.asm 16_acx_anx.asm 17_rte_ntr_xtr.asm \
 	  18_apx_aux.asm
 
+EXAMPLES=arr.asm binop.asm err.asm hello.asm indx.asm leds.asm
+
 OCTS=$(TESTS:.asm=.oct)
 
 %.oct :
-	cd test && python3 ../pymesm.py -i $@ -c 12000
+	python3 pymesm.py -i test/$@ -c 12000
 
 %.asm :
-	cd test && python3 ../asm/asm.py -i $@
+	python3 asm/asm.py -i test/$@
 
 all: build run
 
 build: $(TESTS)
+
+examples: $(EXAMPLES)
 
 run: $(OCTS)
 
