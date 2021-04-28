@@ -18,8 +18,6 @@ all: build run
 
 build: $(TESTS)
 
-examples: $(EXAMPLES)
-
 run: $(OCTS)
 
 clean:
