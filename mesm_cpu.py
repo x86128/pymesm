@@ -36,9 +36,10 @@ op_names = ['atx', 'stx', 'mod', 'xts', 'add', 'sub', 'rsub', 'amx',
             'e70', 'e71', 'e72', 'e73', 'e74', 'e75', 'e76', 'e77',
             'e20', 'e21', 'utc', 'wtc', 'vtm', 'utm', 'uza', 'uia',
             'uj', 'vjm', 'ij', 'stop', 'vzm', 'vim', 'e36', 'vlm']
+
 op_codes = {op: i for i, op in enumerate(op_names)}
 
-op_unimplemented = ['mod', 'apx', 'aux',
+op_unimplemented = ['mod', 'ij',
                     'e32', 'e33',
                     'e46', 'e47', 'e36', 'e20', 'e21',
                     'e50', 'e51', 'e52', 'e53', 'e54', 'e55', 'e56', 'e57',
@@ -117,7 +118,7 @@ class CPU:
         self.trace = False
 
         for op in op_unimplemented:
-            setattr(self, f"op_{op}", self.op_unimpl)
+            setattr(self, f"op_{op}", self.op_unimplemented)
 
         self._opcodes = [getattr(self, f"op_{op}") for op in op_names]
 
@@ -362,7 +363,6 @@ class CPU:
         while not (acc & BIT48):
             bit += 1
             acc = (acc << 1) & MASK48
-        self.rmr = (self.acc << bit) & MASK48
         return bit
 
     def op_anx(self):
@@ -790,12 +790,41 @@ class CPU:
                             break
             self.acc_wr((a_exp << 41) | a_mnt)
 
-    def op_unimpl(self):
-        self.running = False
-        print(f"Unimplemented instruction at: {self.pc}")
-        self.print_insn()
+    def op_apx(self):
+        if self.stack:
+            self.sp -= 1
+        acc = 0
+        x = self.dbus.read(self.uaddr)
+        while x != 0:
+            if x & 1:
+                acc >>= 1
+                if self.acc & 1:
+                    acc |= BIT48
+            x >>= 1
+            self.acc >>= 1
+        self.acc_wr(acc)
+        self.set_log()
 
-    def print_insn(self):
+    def op_aux(self):
+        if self.stack:
+            self.sp -= 1
+        acc = 0
+        x = self.dbus.read(self.uaddr)
+        for i in range(48):
+            acc <<= 1
+            if x & BIT48:
+                if self.acc & BIT48:
+                    acc |= 1
+                self.acc <<= 1
+            x <<= 1
+        self.acc_wr(acc)
+        self.set_log()
+
+    def op_unimplemented(self):
+        print(f"WARN: Unimplemented instruction at: {self.pc}")
+        self.print_instruction()
+
+    def print_instruction(self):
         if self.op_indx == 0:
             print(f"{self.pc:>05o}: {op_names[self.op_code]} {self.op_addr:>05o}")
         else:
@@ -817,7 +846,7 @@ class CPU:
         self.is_left = not self.is_left
 
         if self.trace:
-            self.print_insn()
+            self.print_instruction()
 
         self._opcodes[self.op_code]()
 
