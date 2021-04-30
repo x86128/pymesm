@@ -18,9 +18,9 @@ Long address format:
 |---|---|---|---|
 | index | 1 | op_code | address |
 
-Instructions implemented by translating original MESM6 microcode.
+Instructions implemented by translating MESM6 microcode.
 
-Most of the tests adopted from original MESM6 https://github.com/besm6/mesm6
+Most of the tests adopted from MESM6 https://github.com/besm6/mesm6
 
 ## Implemented CPU instructions
 
@@ -32,18 +32,18 @@ Most of the tests adopted from original MESM6 https://github.com/besm6/mesm6
 * Shift
   * ASX, ASN
 * Logic
-  * AAX, AOX, AEX
+  * AAX, AOX, AEX, APX, AUX, ACX, ANX
 * Address modifiers
   * UTC, WTC
 * Set address modifier register
   * UTM, VTM, MTJ, J+M
 * Branch
   * VZM, V1M, VLM, VJM, UJ, U1A, UZA
-* Stop
-  * STOP
+* Special
+  * STOP, XTR, RTE, EXT
     
 Unimplemented instructions:
-* MOD, APX, AUX, ACX, ANX, XTR, RTE, EXT
+* MOD
 * extracodes
 
 ## Running
