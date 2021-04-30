@@ -1,6 +1,6 @@
 # hello world using loop
 org     1
-ptr     prn0    65535
+ptr     prn0    32767
 
 # loop setup
         vtm     -15,2

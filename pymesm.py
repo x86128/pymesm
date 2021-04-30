@@ -13,8 +13,8 @@ argp.add_argument("-t", required=False, dest="trace", action="store_true", help=
 args = argp.parse_args()
 
 if __name__ == '__main__':
-    irom = RamDevice("IROM0", 65536)
-    dram = RamDevice("DRAM0", 49152)
+    irom = RamDevice("IROM0", 32768)
+    dram = RamDevice("DRAM0", 32767)
     printer = Printer("PRN0")
 
     ibus = Bus("IBUS")
@@ -22,7 +22,7 @@ if __name__ == '__main__':
 
     ibus.attach(irom, 0)
     dbus.attach(dram, 0)
-    dbus.attach(printer, 65535)
+    dbus.attach(printer, 32767)
 
     load_oct(args.input, ibus, dbus)
 
