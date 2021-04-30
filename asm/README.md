@@ -1,6 +1,6 @@
 # Mesm-mini simple assembler
 
-Used to write simple CPU tests.
+Used to write CPU tests.
 
 One line of *.asm file is one instruction to assembler.
 
